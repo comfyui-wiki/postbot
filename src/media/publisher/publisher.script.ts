@@ -126,11 +126,13 @@ export const executeScriptsToTabs = (tabs, data) => {
                 const code = platform.code;
                 platform['executeScript'] = publisher[type]?.[code] || publisher['article']?.[code];
                 const payload = data?.data || {};
+                // Use platform-specific content if available, otherwise fall back to global content
+                const platformContent = payload.platformSpecificContents?.[code] ?? payload.content;
                 const publisherData = {
                     data: {
                         title: payload.title,
-                        content: payload.content,
-                        description: payload.description ?? payload.content,
+                        content: platformContent,
+                        description: payload.description ?? platformContent,
                         mediaType: payload.mediaType,
                         platformCodes: payload.platformCodes,
                         contentImages: payload.contentImages,

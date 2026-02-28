@@ -576,34 +576,44 @@ const loadMetaInfoList = async () => {
 const triggerPublishNow = () => {
   const { mediaType, platformCodes, title, imageUrls } = localPublish.value;
   if (!Array.isArray(platformCodes) || !platformCodes.length) return;
-  
+
   if (!confirm(`确定要发布到已选的 ${platformCodes.length} 个平台吗？`)) return;
 
   let validCodes = platformCodes;
   if (Array.isArray(platformOptions.value) && platformOptions.value.length > 0) {
-    validCodes = platformCodes.filter((code) => 
+    validCodes = platformCodes.filter((code) =>
       platformOptions.value.some((o) => o && o.value === code)
     );
   }
-  
+
   if (!validCodes.length) return;
   const urls = [...(imageUrls || '').split(/[\r\n]+/).map((s) => s.trim()).filter(Boolean), ...localImageDataUrls.value];
   const contentImages = urls.map((src) => ({ src }));
   const cover = urls.length ? urls : undefined;
 
-  // Check if any platform is independent (has custom content)
-  const hasIndependent = validCodes.some(code => platformSyncStatus.value[code] === false);
-
-  if (hasIndependent) {
-    // Publish each platform with its specific content
-    for (const code of validCodes) {
-      const content = platformContents.value[code] ?? localPublish.value.content;
-      chrome.runtime.sendMessage({ type: 'request', action: POSTBOT_ACTION.PUBLISH_NOW, data: { mediaType, platformCodes: [code], title, content, contentImages: contentImages.length ? contentImages : undefined, images: contentImages.length ? contentImages : undefined, cover, isAutoPublish: false } });
-    }
-  } else {
-    // All platforms synced - publish with global content
-    chrome.runtime.sendMessage({ type: 'request', action: POSTBOT_ACTION.PUBLISH_NOW, data: { mediaType, platformCodes: validCodes, title, content: localPublish.value.content, contentImages: contentImages.length ? contentImages : undefined, images: contentImages.length ? contentImages : undefined, cover, isAutoPublish: false } });
+  // Build platform-specific content mapping
+  const platformSpecificContents: Record<string, string> = {};
+  for (const code of validCodes) {
+    // If platform is independent, use its custom content; otherwise use global content
+    platformSpecificContents[code] = platformContents.value[code] ?? localPublish.value.content;
   }
+
+  // Send once with all platforms and their specific content mapping
+  chrome.runtime.sendMessage({
+    type: 'request',
+    action: POSTBOT_ACTION.PUBLISH_NOW,
+    data: {
+      mediaType,
+      platformCodes: validCodes,
+      title,
+      content: localPublish.value.content,
+      platformSpecificContents, // New: map of platform code -> custom content
+      contentImages: contentImages.length ? contentImages : undefined,
+      images: contentImages.length ? contentImages : undefined,
+      cover,
+      isAutoPublish: false
+    }
+  });
   saveDraft();
 };
 </script>
