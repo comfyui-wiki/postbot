@@ -64,7 +64,7 @@ defineEmits(['close', 'detect']);
 .modal-header {
   padding: 20px 24px; border-bottom: 1px solid @border;
   display: flex; justify-content: space-between; align-items: center;
-  .modal-title { font-weight: 700; font-size: 16px; }
+  .modal-title { font-weight: 700; font-size: 16px; color: @text; }
 }
 
 .modal-close { background: transparent; border: none; color: @muted; cursor: pointer; font-size: 18px; }
@@ -98,13 +98,23 @@ defineEmits(['close', 'detect']);
 
 .account-link {
   display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px;
-  background: rgba(255,255,255,0.03); text-decoration: none; color: @text; font-size: 13px;
+  background: rgba(255,255,255,0.03) !important; text-decoration: none; color: @text; font-size: 13px;
   transition: background 0.2s;
   &:hover { background: rgba(255,255,255,0.05); }
+
+  span {
+    background: transparent !important;
+  }
 }
 
 .p-dot {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; border-radius: 50%; font-size: 9px; font-weight: 700; color: #fff;
+  width: 24px; height: 24px; border-radius: 50%; font-size: 9px; font-weight: 700; color: #fff !important;
+
+  &.sm {
+    width: 20px;
+    height: 20px;
+    font-size: 8px;
+  }
 }
 </style>

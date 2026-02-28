@@ -26,9 +26,9 @@
     <div class="editor-canvas">
       <div class="editor-container">
         <div class="writing-area">
-          <!-- Sync Mode Toggle -->
-          <div v-if="enabledPlatforms.length > 1" class="sync-mode-banner">
-            <span class="sync-label">Sync with {{ enabledPlatforms.find(p => p.value === activePlatform)?.label || 'PostBot' }}</span>
+          <!-- Sync Mode Toggle (Hide for first platform) -->
+          <div v-if="enabledPlatforms.length > 1 && !isFirstPlatform" class="sync-mode-banner">
+            <span class="sync-label">Sync with {{ enabledPlatforms[0]?.label || 'PostBot' }}</span>
             <button class="sync-switch" :class="{ active: synced }" @click="$emit('toggle-sync')" :title="synced ? '切换为独立编辑' : '切换为同步模式'">
               <span class="switch-circle"></span>
             </button>
@@ -45,9 +45,11 @@
           <textarea
             ref="textareaRef"
             class="main-editor"
+            :class="{ disabled: synced }"
             :value="content"
             @input="onInput"
             :placeholder="editorPlaceholder"
+            :disabled="synced"
           />
 
           <!-- Media Previews -->
@@ -90,6 +92,7 @@ const props = defineProps<{
   activePlatform: string | null;
   imageUrls: string[];
   mediaType: string;
+  isFirstPlatform: boolean;
   getPlatformColor: (code: string) => string;
   getPlatformInitial: (code: string) => string;
 }>();
@@ -329,6 +332,12 @@ watch(() => props.activePlatform, () => {
   line-height: 1.6;
   padding: 0;
   &::placeholder { color: #3f3f46; }
+
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: #a1a1a6;
+  }
 }
 
 .media-grid {

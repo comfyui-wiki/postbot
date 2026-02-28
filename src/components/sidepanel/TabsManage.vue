@@ -20,9 +20,10 @@
       v-model:content="currentContent"
       v-model:activePlatform="activePlatform"
       v-model:mediaType="localPublish.mediaType"
-      :synced="synced"
+      :synced="activePlatform !== localPublish.platformCodes[0] && platformSyncStatus[activePlatform || ''] !== false"
       :enabledPlatforms="enabledPlatforms"
       :imageUrls="localImageDataUrls"
+      :isFirstPlatform="activePlatform === localPublish.platformCodes[0]"
       :getPlatformColor="platformColor"
       :getPlatformInitial="platformInitial"
       @toggle-sync="toggleSync"
@@ -105,8 +106,10 @@ const activePlatform    = ref<string | null>(null);
 const selectedDraftId   = ref<string | null>(null);
 
 // ── 内容同步状态 ──────────────────────────────────────────────────────
-const synced           = ref(true);
-const platformContents = ref<Record<string, string>>({});
+// 全局文案存在 localPublish.value.content
+// 各平台的独立同步状态：key=platform code, value=是否与第一个平台同步
+const platformSyncStatus = ref<Record<string, boolean>>({}); // 默认所有平台都同步
+const platformContents = ref<Record<string, string>>({}); // 仅当平台取消同步时才存储独立内容
 
 // ── 表单状态 ──────────────────────────────────────────────────────────────
 const platformOptions       = ref<{ label: string; value: string; link?: string }[]>([]);
@@ -166,13 +169,31 @@ const availablePlatformsForModal = computed(() => {
 
 const currentContent = computed<string>({
   get() {
-    if (synced.value || !activePlatform.value) return localPublish.value.content;
+    if (!activePlatform.value) return localPublish.value.content;
+    // 第一个平台始终可编辑（用于编辑全局文案）
+    // 其他平台：如果同步，返回全局文案；否则返回独立文案
+    const isFirstPlatform = activePlatform.value === localPublish.value.platformCodes[0];
+    const isSynced = platformSyncStatus.value[activePlatform.value] !== false; // 默认同步
+
+    if (isFirstPlatform || isSynced) {
+      return localPublish.value.content;
+    }
     return platformContents.value[activePlatform.value] ?? localPublish.value.content;
   },
   set(val: string) {
-    if (synced.value || !activePlatform.value) {
+    if (!activePlatform.value) {
+      localPublish.value.content = val;
+      return;
+    }
+    // 第一个平台始终编辑全局文案
+    const isFirstPlatform = activePlatform.value === localPublish.value.platformCodes[0];
+    const isSynced = platformSyncStatus.value[activePlatform.value] !== false;
+
+    if (isFirstPlatform || isSynced) {
+      // 第一个平台或同步模式：修改全局文案
       localPublish.value.content = val;
     } else {
+      // 独立模式（非第一个平台）：修改该平台的独立文案
       platformContents.value = { ...platformContents.value, [activePlatform.value]: val };
     }
   },
@@ -204,24 +225,33 @@ const togglePlatform = (code: string) => {
 };
 
 const toggleSync = () => {
-  if (!synced.value) {
-    // 从独立模式切回同步模式：合并所有平台内容到全局
-    // （这里简单地选择当前激活平台的内容作为新的全局草稿）
-    if (activePlatform.value && platformContents.value[activePlatform.value]) {
-      localPublish.value.content = platformContents.value[activePlatform.value];
-    }
-    platformContents.value = {};
-    synced.value = true;
+  if (!activePlatform.value) return;
+
+  // 第一个平台不允许切换同步状态（始终同步）
+  const isFirstPlatform = activePlatform.value === localPublish.value.platformCodes[0];
+  if (isFirstPlatform) return;
+
+  const isSynced = platformSyncStatus.value[activePlatform.value] !== false;
+
+  if (isSynced) {
+    // 从同步切到独立：保存当前全局文案作为该平台的初始独立文案
+    platformContents.value = {
+      ...platformContents.value,
+      [activePlatform.value]: localPublish.value.content
+    };
+    platformSyncStatus.value = {
+      ...platformSyncStatus.value,
+      [activePlatform.value]: false
+    };
   } else {
-    // 从同步模式切到独立模式：给每个平台复制一份当前的全局草稿作为初始内容
-    const base = localPublish.value.content;
-    const seeded: Record<string, string> = {};
-    for (const p of enabledPlatforms.value) {
-      // 保留已有的独立内容，或用全局草稿初始化
-      seeded[p.value] = platformContents.value[p.value] ?? base;
-    }
-    platformContents.value = seeded;
-    synced.value = false;
+    // 从独立切回同步：删除该平台的独立内容
+    const newPlatformContents = { ...platformContents.value };
+    delete newPlatformContents[activePlatform.value];
+    platformContents.value = newPlatformContents;
+    platformSyncStatus.value = {
+      ...platformSyncStatus.value,
+      [activePlatform.value]: true
+    };
   }
 };
 
@@ -233,7 +263,7 @@ const removeImage = (index: number) => {
 const createNewDraft = () => {
   localPublish.value.content = '';
   platformContents.value = {};
-  synced.value = true;
+  platformSyncStatus.value = {}; // 重置所有平台为同步状态
   // 保留当前平台选择，activePlatform 若已在列表中则不动，否则取第一个
   if (!localPublish.value.platformCodes.includes(activePlatform.value ?? '')) {
     activePlatform.value = localPublish.value.platformCodes[0] ?? null;
@@ -254,8 +284,9 @@ const saveDraft = () => {
   if (!content) return;
   
   const platformData: Record<string, string> = {};
-  if (!synced.value) {
-    for (const code of localPublish.value.platformCodes) {
+  // 保存所有非同步平台的独立内容
+  for (const code of localPublish.value.platformCodes) {
+    if (platformSyncStatus.value[code] === false) {
       platformData[code] = platformContents.value[code] || content;
     }
   }
@@ -263,7 +294,10 @@ const saveDraft = () => {
   if (!selectedDraftId.value) {
     selectedDraftId.value = Date.now().toString();
   }
-  
+
+  // 检查是否有任何平台是独立的
+  const hasIndependent = Object.values(platformSyncStatus.value).some(v => v === false);
+
   const draft: Draft = {
     id: selectedDraftId.value,
     content,
@@ -271,7 +305,7 @@ const saveDraft = () => {
     platforms: enabledPlatforms.value.map((p) => p.label),
     platformCodes: [...localPublish.value.platformCodes],
     platformData,
-    isSynced: synced.value
+    isSynced: !hasIndependent
   };
 
   const existingIndex = drafts.value.findIndex(d => d.id === selectedDraftId.value);
@@ -288,7 +322,7 @@ const saveDraft = () => {
 };
 
 watch(
-  [() => localPublish.value.content, () => localPublish.value.platformCodes, synced, platformContents],
+  [() => localPublish.value.content, () => localPublish.value.platformCodes, platformContents, platformSyncStatus],
   () => {
     if (localPublish.value.content.trim()) saveDraft();
   },
@@ -299,12 +333,25 @@ const loadDraft = (d: Draft) => {
   selectedDraftId.value = d.id;
   localPublish.value.content = d.content;
   localPublish.value.platformCodes = [...d.platformCodes];
+
+  // Restore platform-level sync status and platform-specific content
   if (d.platformData && !d.isSynced) {
+    // Some platforms were independent when saved
     platformContents.value = { ...d.platformData };
-    synced.value = false;
+    // Mark only independent platforms in sync status (false = independent)
+    platformSyncStatus.value = {};
+    for (const code of d.platformCodes) {
+      platformSyncStatus.value[code] = !d.platformData[code]; // if platformData has content, it's independent
+    }
   } else {
-    synced.value = true;
+    // All platforms synced
+    platformContents.value = {};
+    platformSyncStatus.value = {};
+    for (const code of d.platformCodes) {
+      platformSyncStatus.value[code] = true; // all synced
+    }
   }
+
   activePlatform.value = d.platformCodes[0] || null;
 };
 
@@ -542,12 +589,17 @@ const triggerPublishNow = () => {
   const contentImages = urls.map((src) => ({ src }));
   const cover = urls.length ? urls : undefined;
 
-  if (!synced.value) {
+  // Check if any platform is independent (has custom content)
+  const hasIndependent = validCodes.some(code => platformSyncStatus.value[code] === false);
+
+  if (hasIndependent) {
+    // Publish each platform with its specific content
     for (const code of validCodes) {
       const content = platformContents.value[code] ?? localPublish.value.content;
       chrome.runtime.sendMessage({ type: 'request', action: POSTBOT_ACTION.PUBLISH_NOW, data: { mediaType, platformCodes: [code], title, content, contentImages: contentImages.length ? contentImages : undefined, images: contentImages.length ? contentImages : undefined, cover, isAutoPublish: false } });
     }
   } else {
+    // All platforms synced - publish with global content
     chrome.runtime.sendMessage({ type: 'request', action: POSTBOT_ACTION.PUBLISH_NOW, data: { mediaType, platformCodes: validCodes, title, content: localPublish.value.content, contentImages: contentImages.length ? contentImages : undefined, images: contentImages.length ? contentImages : undefined, cover, isAutoPublish: false } });
   }
   saveDraft();

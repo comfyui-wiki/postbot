@@ -59,12 +59,12 @@ defineEmits(['close', 'toggle']);
 .modal-header {
   padding: 20px 24px; border-bottom: 1px solid @border;
   display: flex; justify-content: space-between; align-items: center;
-  .modal-title { font-weight: 700; font-size: 16px; }
+  .modal-title { font-weight: 700; font-size: 16px; color: @text; }
 }
 
 .modal-close { background: transparent; border: none; color: @muted; cursor: pointer; font-size: 18px; }
 
-.modal-body { padding: 24px; }
+.modal-body { padding: 24px; max-height: 70vh; overflow-y: auto; }
 .modal-subtitle { color: @muted; font-size: 13px; margin-bottom: 20px; }
 
 .platform-list { display: flex; flex-direction: column; gap: 8px; }
@@ -77,8 +77,8 @@ defineEmits(['close', 'toggle']);
 
 .platform-row-left { display: flex; align-items: center; gap: 12px; }
 .platform-row-info {
-  .name { font-size: 14px; font-weight: 600; }
-  .handle { font-size: 12px; color: @muted; }
+  .name { font-size: 14px; font-weight: 600; color: @text; }
+  .handle { font-size: 12px; color: @muted; background: transparent !important; }
 }
 
 .toggle-switch {
@@ -90,6 +90,6 @@ defineEmits(['close', 'toggle']);
 
 .p-dot {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff;
+  width: 32px; height: 32px; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff !important;
 }
 </style>
