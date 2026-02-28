@@ -16,12 +16,6 @@
 <template>
     <div>
         <Card hoverable style="width: 100%;">
-            <template #cover>
-            <img
-                alt="PostBot"
-                src="https://cdn.exmay.com/exmay/exmay-app/static/images/postbot_home.png"
-            />
-            </template>
             <template #actions>
             <!-- <SettingOutlined key="setting" />
             <EditOutlined key="edit" />

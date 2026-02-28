@@ -68,3 +68,31 @@ export const imageDownloadToBase64 = async (imageUrl) => {
     const url = getImageDownloadUrl(imageUrl);
     return await imageToBase64(url);
 }
+
+/** Fetch image URL (or data URL) and return base64 + type + name for use in injected scripts. */
+export const fetchImageToBase64 = async (
+    imageUrl: string
+): Promise<{ base64data: string; imageType: string; imageName?: string } | null> => {
+    try {
+        const response = await fetch(imageUrl);
+        if (!response.ok) return null;
+        const blob = await response.blob();
+        const imageType = blob.type || 'image/jpeg';
+        const disposition = response.headers.get('Content-Disposition');
+        let imageName: string | undefined;
+        if (disposition && disposition.indexOf('attachment') !== -1) {
+            const m = /filename="([^;]+)"/.exec(disposition);
+            if (m?.[1]) imageName = m[1];
+        }
+        const base64data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(String(reader.result));
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+        return { base64data, imageType, imageName };
+    } catch (e) {
+        console.warn('[PostBot] fetchImageToBase64 failed', imageUrl, e);
+        return null;
+    }
+}

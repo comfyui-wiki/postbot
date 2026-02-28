@@ -26,38 +26,68 @@ import { windowPublish } from "~media/publisher";
 
 import { isLoginApi } from "~api/media/user.api";
 
+const safeSendResponse = (sendResponse, payload) => {
+    try {
+        sendResponse(payload);
+    } catch (e) {
+        console.error('[PostBot] sendResponse error', e);
+    }
+};
+
+const isFromExtensionPage = (sender: chrome.runtime.MessageSender | undefined): boolean => {
+    if (!sender?.url) return false;
+    try {
+        const extUrl = chrome.runtime.getURL('');
+        return sender.url.startsWith(extUrl);
+    } catch {
+        return false;
+    }
+};
+
 export const handleMessage = async (request, sender, sendResponse) => {
     let message = {};
     const data = request?.data;
-    switch (request.action) {
-        case POSTBOT_ACTION.CHECK_EXTENSION:
-            message = {
-                extensionId: chrome.runtime.id,
-                // enabled: enabled,
-            };
-            sendResponse(message);
-            break;
-        case POSTBOT_ACTION.PLATFORM_LIST:
-            const platforms = getPlatforms();
-            console.log('platforms', platforms);
-            message = {
-                platforms: platforms[data?.type],
+    try {
+        switch (request.action) {
+            case POSTBOT_ACTION.CHECK_EXTENSION:
+                message = {
+                    extensionId: chrome.runtime.id,
+                };
+                safeSendResponse(sendResponse, message);
+                break;
+            case POSTBOT_ACTION.PLATFORM_LIST: {
+                const platforms = getPlatforms();
+                const byType = platforms?.[data?.type];
+                const list = Array.isArray(byType) ? byType : Object.values(byType ?? {});
+                message = { platforms: list };
+                safeSendResponse(sendResponse, message);
+                break;
             }
-            sendResponse(message);
-            break;
-        case POSTBOT_ACTION.META_INFO_LIST:
-
-            // chrome.runtime.sendMessage({ action: 'getMetaInfoList' }, (response) => {
-            //   console.log('response', response);
-            const metaInfoList = await getMetaInfoList();
-            state.metaInfoList = metaInfoList;
-            message = {
-                metaInfoList: metaInfoList,
+            case POSTBOT_ACTION.META_INFO_LIST: {
+                const metaInfoList = await getMetaInfoList();
+                state.metaInfoList = metaInfoList;
+                const codes = Object.keys(metaInfoList ?? {});
+                const platformsByType = getPlatforms();
+                const names = codes.map((code) => {
+                    for (const type of ['article', 'moment', 'video']) {
+                        const p = platformsByType?.[type]?.[code];
+                        if (p && (p.name || p.platformName)) return p.name || p.platformName;
+                    }
+                    return code;
+                });
+                console.log('[PostBot] 已获取平台登录信息:', names.join('、'), `(${codes.length} 个)`);
+                message = { metaInfoList: metaInfoList ?? {} };
+                safeSendResponse(sendResponse, message);
+                break;
             }
-            console.log('message', message);
-            sendResponse(message);
-            // return true;
-            // });
+        case 'OPEN_SIDE_PANEL':
+            try {
+                const win = await chrome.windows.getCurrent();
+                if (win?.id != null) await chrome.sidePanel?.open({ windowId: win.id });
+            } catch {
+                chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') });
+            }
+            safeSendResponse(sendResponse, {});
             break;
         case POSTBOT_ACTION.PUBLISH_SYNC_DATA:
             console.debug('request.data', request.data);
@@ -71,30 +101,87 @@ export const handleMessage = async (request, sender, sendResponse) => {
 
             state.contentData = null;
             break;
-        case POSTBOT_ACTION.PUBLISH_NOW:
-            const mediaType = data.mediaType || 'article'
+        case POSTBOT_ACTION.PUBLISH_NOW: {
+            if (!isFromExtensionPage(sender)) {
+                console.warn('[PostBot] 仅接受来自扩展侧栏/弹窗的发布请求，已忽略');
+                break;
+            }
+            const mediaType = data.mediaType || 'article';
             const platformCodes = data.platformCodes;
-            console.debug('platformCodes', platformCodes);
+            console.debug('[PostBot] PUBLISH_NOW mediaType', mediaType, 'platformCodes', platformCodes);
+            state.contentData = data;
             const publishPlatforms = getPlatforms();
-            console.debug('publishPlatforms', publishPlatforms);
+            const byType = publishPlatforms[mediaType];
+            if (!byType) {
+                console.warn('[PostBot] 未找到内容类型:', mediaType);
+                break;
+            }
+            const allPlatforms = Array.isArray(byType) ? byType : Object.values(byType);
+            let checkedPlatforms = allPlatforms.filter((item) => platformCodes.includes(item.code));
+            // 按平台 code 去重，避免同一平台被打开多次
+            const seen = new Set<string>();
+            checkedPlatforms = checkedPlatforms.filter((item) => {
+                if (seen.has(item.code)) return false;
+                seen.add(item.code);
+                return true;
+            });
+            console.debug('[PostBot] 本次发布平台', checkedPlatforms.map((p) => p.code), 'mediaType=', mediaType);
 
-            let allPlatforms = Object.values(publishPlatforms[mediaType]);
-            const checkedPlatforms = allPlatforms.filter(item => platformCodes.includes(item.code));
-            console.debug('checkedPlatforms', checkedPlatforms);
+            const BILIBILI_PUBLISH_URLS: Record<string, string> = {
+                moment: 'https://t.bilibili.com/',
+                article: 'https://member.bilibili.com/platform/upload/text/edit',
+                video: 'https://member.bilibili.com/platform/upload/video/frame',
+            };
+            checkedPlatforms = checkedPlatforms.map((item) => {
+                const next = { ...item, metaInfo: state.metaInfoList[item.code] };
+                if (item.code === 'bilibili') {
+                    const url = BILIBILI_PUBLISH_URLS[mediaType];
+                    if (url) {
+                        next.publishUrl = url;
+                        delete (next as Record<string, unknown>).publishUrls;
+                    }
+                }
+                return next;
+            });
 
-            checkedPlatforms.forEach(item => {
-                item['metaInfo'] = state.metaInfoList[item.code];
+            // 仅选「动态」+「哔哩哔哩」时：只保留一个平台且 URL 必须是 t.bilibili.com
+            if (mediaType === 'moment' && Array.isArray(platformCodes) && platformCodes.length === 1 && platformCodes[0] === 'bilibili') {
+                const single = checkedPlatforms.find((p) => p.code === 'bilibili');
+                if (single) {
+                    (single as Record<string, unknown>).publishUrl = BILIBILI_PUBLISH_URLS.moment;
+                    delete (single as Record<string, unknown>).publishUrls;
+                    checkedPlatforms = [single];
+                }
+            }
+
+            // 完全排除 exmay.com 及非当前类型的 B 站视频页，避免误开登录/创作中心
+            const forbidUrl = (url: string) => {
+                if (!url || typeof url !== 'string') return true;
+                const u = url.toLowerCase();
+                if (u.includes('exmay.com')) return true;
+                if (mediaType === 'moment' && u.includes('member.bilibili.com') && u.includes('video')) return true;
+                return false;
+            };
+            checkedPlatforms = checkedPlatforms.filter((item) => {
+                const url = typeof item.publishUrl === 'string' ? item.publishUrl : (item as Record<string, unknown>).publishUrls?.[0];
+                if (forbidUrl(url)) {
+                    console.warn('[PostBot] 已排除平台链接（exmay/错误B站）:', item.code, url);
+                    return false;
+                }
+                return true;
             });
 
             const publishData = {
                 platforms: checkedPlatforms,
                 data: data,
-            }
+            };
             windowPublish(publishData);
             break;
+        }
         case 'fetchImage':
+            // Keep channel open for async sendResponse
             let imageType = null;
-            fetch(data.imageUrl)
+            fetch(data?.imageUrl)
                 .then((response) => {
                     const imageName = getFileName(response);
                     // 获取图片的 Blob
@@ -123,16 +210,20 @@ export const handleMessage = async (request, sender, sendResponse) => {
                     console.error('获取图片失败:', error);
                     sendResponse({ error: error.message });
                 });
-            break;
-        case 'checkLogin':
+            return true; // keep channel open for async sendResponse
+        case 'checkLogin': {
             const res = await isLoginApi({});
             console.debug('res', res);
-            sendResponse({
-                isLogin: res?.data?.login,
-            });
+            safeSendResponse(sendResponse, { isLogin: res?.data?.login });
             break;
+        }
         default:
+            safeSendResponse(sendResponse, {});
             break;
+        }
+    } catch (err) {
+        console.error('[PostBot] handleMessage error', request?.action, err);
+        safeSendResponse(sendResponse, { error: err?.message || String(err) });
     }
 }
 

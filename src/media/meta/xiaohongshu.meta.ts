@@ -50,6 +50,9 @@ const Api = {
 // }
 
 const getMetaInfo = (html) => {
+  if (html == null || typeof html !== 'string') {
+    throw new Error('获取失败');
+  }
   const match = html.match(/window\.__INITIAL_STATE__=(\{.+?\})(?:<\/script>|;)/s);
   console.log('match', match);
   if (match) {

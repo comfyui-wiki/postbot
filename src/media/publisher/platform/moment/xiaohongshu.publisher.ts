@@ -238,7 +238,18 @@ export const xiaohongshuMomentPublisher = async (data) => {
         // editor.dispatchEvent(new Event('change', { bubbles: true }));
 
         const editorPasteEvent = pasteEvent();
-        editorPasteEvent.clipboardData.setData('text/html', contentData?.content);
+        const rawContent = contentData?.content ?? '';
+        // 判断是否已是 HTML；若是则直接使用，若是纯文本则将每行包成 <p> 段落
+        // （XHS 的富文本编辑器会丢弃裸 <br> 标签，但能正确识别 <p> 段落创建换行）
+        const isHtml = /<[a-z][^>]*>/i.test(rawContent);
+        const htmlContent = isHtml
+            ? rawContent
+            : rawContent.split('\n').map(line => `<p>${line || '<br>'}</p>`).join('');
+        const plainContent = isHtml
+            ? rawContent.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '').trim()
+            : rawContent;
+        editorPasteEvent.clipboardData.setData('text/html', htmlContent);
+        editorPasteEvent.clipboardData.setData('text/plain', plainContent);
         editor.dispatchEvent(editorPasteEvent);
         editor.dispatchEvent(new Event('input', { bubbles: true }));
         editor.dispatchEvent(new Event('change', { bubbles: true }));
@@ -274,27 +285,47 @@ export const xiaohongshuMomentPublisher = async (data) => {
     uploadImageButton.dispatchEvent(new Event('click', { bubbles: true }));
     await sleep(1000);
 
-    let allImages = [];
+    const allImages: Array<{ url?: string; src?: string; objectUrl?: string; name?: string; type?: string }> = [];
+    const seenUrls = new Set<string>();
+
+    const pushIfNew = (item: { url?: string; src?: string; objectUrl?: string; name?: string; type?: string } | string) => {
+        let url: string | undefined;
+        if (typeof item === 'string') {
+            url = item;
+        } else if (item && typeof item === 'object') {
+            url = item.url ?? item.src;
+        }
+        if (!url || seenUrls.has(url)) return;
+        seenUrls.add(url);
+        if (typeof item === 'string') {
+            allImages.push({ url: item });
+        } else if (item && typeof item === 'object') {
+            allImages.push(item);
+        }
+    };
 
     if (contentData?.cover) {
-        for (const image of contentData?.cover) {
-            if (image instanceof Object) {
-                allImages.push(image);
-            } else {
-                allImages.push({
-                    url: image,
-                });
+        for (const image of contentData.cover) {
+            if (image && typeof image === 'object' && (image as { url?: string }).url !== undefined) {
+                pushIfNew(image as { url?: string; src?: string });
+            } else if (typeof image === 'string') {
+                pushIfNew(image);
             }
         }
     }
 
     let images = contentData?.images;
     if (!images || images.length === 0) {
-        images = contentData?.contentImages
+        images = contentData?.contentImages;
     }
-
     if (images) {
-        allImages.push(...images);
+        for (const img of images) {
+            if (img && typeof img === 'object') {
+                pushIfNew(img as { url?: string; src?: string });
+            } else if (typeof img === 'string') {
+                pushIfNew(img);
+            }
+        }
     }
 
     await uploadImages(allImages);

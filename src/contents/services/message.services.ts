@@ -17,8 +17,6 @@ import { getReaderData } from "~media/parser"
 
 import { state } from "../components/postbot.data"
 
-import { getPostBotBaseUrl } from '~config/config';
-
 import { handleMetaMessage } from "./meta.services";
 
 export const handleMessage = (request, sender, sendResponse) => {
@@ -29,7 +27,7 @@ export const handleMessage = (request, sender, sendResponse) => {
     let userInfo = {};
     switch (request.action) {
         case 'doLogin':
-            window.open(`${getPostBotBaseUrl()}/exmay/postbot/media/publish`, '_blank');
+            // 本地发布模式：不再打开 exmay.com 登录/发布页，改为通知打开侧栏（由调用方或 contextMenus 处理）
             sendResponse({});
             break;
         case 'getImages':

@@ -23,6 +23,9 @@ const Api = {
 };
 
 export const getOsChinaMetaInfo = (html) => {
+    if (html == null || typeof html !== 'string') {
+        return null;
+    }
     const userNameMatch = html.match(/data-name="g_user_name" data-value="([^"]+)"/);
     const userIdMatch = html.match(/data-name="g_user_id" data-value="([^"]+)"/);
     const userPortraitSmallMatch = html.match(/data-name="g_user_small_portrait" data-value="([^"]+)"/);
