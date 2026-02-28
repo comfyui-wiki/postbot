@@ -31,7 +31,7 @@ import iconUrl from "~assets/icon.png";
 
 import { POSTBOT_ACTION } from '~message/postbot.action';
 
-import { getPostBotBaseUrl } from '~config/config';
+// 本地发布模式：不再打开 exmay.com 页面
 
 // import { state } from './postbot.data';
 
@@ -58,17 +58,16 @@ export default defineComponent({
     const content = ref('');
     const title = ref('');
 
-    // 点击按钮时打开 Modal
+    // 点击按钮时打开 Modal（未登录时打开发布侧栏，不再打开 exmay.com）
     const handleClick = () => {
       chrome.runtime.sendMessage({ type: 'request', action: 'checkLogin' }, (response) => {
         console.log('response', response);
-        if (response.isLogin) {
+        if (response?.isLogin) {
           state.isModalVisible = true;
         } else {
-          window.open(`${getPostBotBaseUrl()}/exmay/postbot/media/publish`, '_blank');
+          chrome.runtime.sendMessage({ type: 'request', action: 'OPEN_SIDE_PANEL' }, () => {});
         }
       });
-
     }
 
     // 关闭 Modal
@@ -77,21 +76,12 @@ export default defineComponent({
     }
 
     const onOk = () => {
-
       chrome.runtime.sendMessage({
         type: 'request',
         action: POSTBOT_ACTION.PUBLISH_SYNC_DATA,
         data: contentData.value,
       });
-
-      const newWindow = window.open(`${getPostBotBaseUrl()}/exmay/postbot/media/publish`, '_blank');
-      if (newWindow) {
-        newWindow.onload = () => {
-          console.log('同步数据');
-          contentData.value = null;
-        }
-      }
-
+      contentData.value = null;
       state.isModalVisible = false;
     }
 
