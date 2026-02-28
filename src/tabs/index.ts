@@ -80,9 +80,20 @@ export const waitOnUpdatedTab = async (tab) => {
     });
 }
 
+const FORBIDDEN_URLS_LOCAL_PUBLISH = [
+    'exmay.com',
+];
+
+const isForbiddenUrl = (url: string): boolean => {
+    if (!url || typeof url !== 'string') return true;
+    const u = url.toLowerCase();
+    return FORBIDDEN_URLS_LOCAL_PUBLISH.some((forbidden) => u.includes(forbidden.toLowerCase()));
+};
+
 export const createTabsForPlatforms = async (data) => {
     let tabs = [];
     let tabGroupId;
+    const mediaType = data?.data?.mediaType;
 
     for (const platform of data?.platforms) {
         if (!platform) {
@@ -103,6 +114,14 @@ export const createTabsForPlatforms = async (data) => {
         }
 
         for (const publishUrl of publishUrls) {
+            if (isForbiddenUrl(publishUrl)) {
+                console.warn('[PostBot] 跳过本地发布不应打开的链接:', publishUrl);
+                continue;
+            }
+            if (mediaType === 'moment' && platform?.code === 'bilibili' && publishUrl !== 'https://t.bilibili.com/') {
+                console.warn('[PostBot] 动态+哔哩哔哩仅打开 t.bilibili.com，跳过:', publishUrl);
+                continue;
+            }
 
             tab = await createTab(publishUrl);
 

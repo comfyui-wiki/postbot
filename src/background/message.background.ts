@@ -34,6 +34,16 @@ const safeSendResponse = (sendResponse, payload) => {
     }
 };
 
+const isFromExtensionPage = (sender: chrome.runtime.MessageSender | undefined): boolean => {
+    if (!sender?.url) return false;
+    try {
+        const extUrl = chrome.runtime.getURL('');
+        return sender.url.startsWith(extUrl);
+    } catch {
+        return false;
+    }
+};
+
 export const handleMessage = async (request, sender, sendResponse) => {
     let message = {};
     const data = request?.data;
@@ -70,6 +80,15 @@ export const handleMessage = async (request, sender, sendResponse) => {
                 safeSendResponse(sendResponse, message);
                 break;
             }
+        case 'OPEN_SIDE_PANEL':
+            try {
+                const win = await chrome.windows.getCurrent();
+                if (win?.id != null) await chrome.sidePanel?.open({ windowId: win.id });
+            } catch {
+                chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') });
+            }
+            safeSendResponse(sendResponse, {});
+            break;
         case POSTBOT_ACTION.PUBLISH_SYNC_DATA:
             console.debug('request.data', request.data);
             state.contentData = request.data;
@@ -83,6 +102,10 @@ export const handleMessage = async (request, sender, sendResponse) => {
             state.contentData = null;
             break;
         case POSTBOT_ACTION.PUBLISH_NOW: {
+            if (!isFromExtensionPage(sender)) {
+                console.warn('[PostBot] 仅接受来自扩展侧栏/弹窗的发布请求，已忽略');
+                break;
+            }
             const mediaType = data.mediaType || 'article';
             const platformCodes = data.platformCodes;
             console.debug('[PostBot] PUBLISH_NOW mediaType', mediaType, 'platformCodes', platformCodes);
@@ -95,19 +118,57 @@ export const handleMessage = async (request, sender, sendResponse) => {
             }
             const allPlatforms = Array.isArray(byType) ? byType : Object.values(byType);
             let checkedPlatforms = allPlatforms.filter((item) => platformCodes.includes(item.code));
-            console.debug('[PostBot] 本次发布平台', checkedPlatforms.map((p) => p.code));
+            // 按平台 code 去重，避免同一平台被打开多次
+            const seen = new Set<string>();
+            checkedPlatforms = checkedPlatforms.filter((item) => {
+                if (seen.has(item.code)) return false;
+                seen.add(item.code);
+                return true;
+            });
+            console.debug('[PostBot] 本次发布平台', checkedPlatforms.map((p) => p.code), 'mediaType=', mediaType);
 
-            const BILIBILI_PUBLISH_URLS = {
+            const BILIBILI_PUBLISH_URLS: Record<string, string> = {
                 moment: 'https://t.bilibili.com/',
                 article: 'https://member.bilibili.com/platform/upload/text/edit',
                 video: 'https://member.bilibili.com/platform/upload/video/frame',
             };
             checkedPlatforms = checkedPlatforms.map((item) => {
                 const next = { ...item, metaInfo: state.metaInfoList[item.code] };
-                if (item.code === 'bilibili' && BILIBILI_PUBLISH_URLS[mediaType]) {
-                    next.publishUrl = BILIBILI_PUBLISH_URLS[mediaType];
+                if (item.code === 'bilibili') {
+                    const url = BILIBILI_PUBLISH_URLS[mediaType];
+                    if (url) {
+                        next.publishUrl = url;
+                        delete (next as Record<string, unknown>).publishUrls;
+                    }
                 }
                 return next;
+            });
+
+            // 仅选「动态」+「哔哩哔哩」时：只保留一个平台且 URL 必须是 t.bilibili.com
+            if (mediaType === 'moment' && Array.isArray(platformCodes) && platformCodes.length === 1 && platformCodes[0] === 'bilibili') {
+                const single = checkedPlatforms.find((p) => p.code === 'bilibili');
+                if (single) {
+                    (single as Record<string, unknown>).publishUrl = BILIBILI_PUBLISH_URLS.moment;
+                    delete (single as Record<string, unknown>).publishUrls;
+                    checkedPlatforms = [single];
+                }
+            }
+
+            // 完全排除 exmay.com 及非当前类型的 B 站视频页，避免误开登录/创作中心
+            const forbidUrl = (url: string) => {
+                if (!url || typeof url !== 'string') return true;
+                const u = url.toLowerCase();
+                if (u.includes('exmay.com')) return true;
+                if (mediaType === 'moment' && u.includes('member.bilibili.com') && u.includes('video')) return true;
+                return false;
+            };
+            checkedPlatforms = checkedPlatforms.filter((item) => {
+                const url = typeof item.publishUrl === 'string' ? item.publishUrl : (item as Record<string, unknown>).publishUrls?.[0];
+                if (forbidUrl(url)) {
+                    console.warn('[PostBot] 已排除平台链接（exmay/错误B站）:', item.code, url);
+                    return false;
+                }
+                return true;
             });
 
             const publishData = {

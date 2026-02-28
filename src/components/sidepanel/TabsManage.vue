@@ -264,6 +264,13 @@
       if (!platformCodes?.length) {
         return;
       }
+      // 只发送当前下拉里存在的平台，避免历史/跨类型残留导致多开错误页
+      const validCodes = platformOptions.value?.length
+        ? platformCodes.filter((code) => platformOptions.value.some((o) => o.value === code))
+        : platformCodes;
+      if (!validCodes.length) {
+        return;
+      }
       const urlLines = (imageUrls || '')
         .split(/[\r\n]+/)
         .map((s) => s.trim())
@@ -277,7 +284,7 @@
           action: POSTBOT_ACTION.PUBLISH_NOW,
           data: {
             mediaType,
-            platformCodes,
+            platformCodes: validCodes,
             title,
             content,
             contentImages: contentImages.length ? contentImages : undefined,

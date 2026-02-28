@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { POSTBOT_ACTION } from "~message/postbot.action";
 // import { getMetaInfoList } from "~media/meta";
 
 window.addEventListener('message', async (event) => {
@@ -30,17 +29,15 @@ window.addEventListener('message', async (event) => {
     console.warn('Untrusted origin:', event.origin);
     return;
   }
+  if (request.action === 'POSTBOT_EXTENSION.PUBLISH_NOW') {
+    return;
+  }
   dispatchSendMessage(request, event);
 });
 
-const isValidOrigin = (origin: string): boolean => {
-  if (!origin) return false;
-  try {
-    const url = new URL(origin);
-    return url.hostname.endsWith('.exmay.com');
-  } catch {
-    return false;
-  }
+const isValidOrigin = (_origin: string): boolean => {
+  // exmay.com 集成已移除，不再接受来自任何外部页面的 postMessage
+  return false;
 }
 
 const dispatchSendMessage = (request, event) => {

@@ -151,12 +151,30 @@ export const bilibiliMomentPublisher = async (data) => {
     if (imageItems.length > 0) {
         await sleep(500);
 
-        /** 点击「添加图片」区域：B站动态使用 .bili-pics-uploader__add，点击后可能显示/聚焦 input[type=file] */
+        /** 始终先点工具栏「图片」：B 站动态页的 input[type=file] 只有在点击 .pic 后才会出现或激活（Playwright 实测） */
+        const clickToolbarPic = async (): Promise<void> => {
+            const toolPic = document.querySelector('.bili-dyn-publishing__tools__item.pic') as HTMLElement | null;
+            if (toolPic) {
+                toolPic.click();
+                await sleep(800);
+            }
+        };
+
+        /** 若上传区未出现则等待；否则不操作 */
+        const ensureUploaderVisible = async (): Promise<void> => {
+            if (document.querySelector('.bili-pics-uploader')) return;
+            try {
+                await waitFor('.bili-pics-uploader', 8000);
+            } catch {
+                // ignore
+            }
+        };
+
+        /** 点击上传区内的「添加」：用于多图时追加下一张 */
         const clickAddImage = async (): Promise<void> => {
             const addEl =
                 document.querySelector('.bili-pics-uploader__add') as HTMLElement | null ||
-                document.querySelector('.bili-pics-uploader [class*="add"]') as HTMLElement | null ||
-                document.querySelector('.bili-dyn-publishing__tools__item.pic') as HTMLElement | null;
+                document.querySelector('.bili-pics-uploader [class*="add"]') as HTMLElement | null;
             if (addEl) {
                 addEl.click();
                 await sleep(500);
@@ -164,6 +182,23 @@ export const bilibiliMomentPublisher = async (data) => {
         };
 
         const findFileInput = (): HTMLInputElement | null => {
+            // 优先：工具栏「图片」按钮关联的 input（点击 .pic 会触发文件选择，说明有关联的 input）
+            const toolPic = document.querySelector('.bili-dyn-publishing__tools__item.pic');
+            if (toolPic) {
+                const label = toolPic.closest('label');
+                if (label) {
+                    const forId = label.getAttribute('for');
+                    const inp = forId ? document.getElementById(forId) : label.querySelector('input[type="file"]');
+                    if (inp && (inp as HTMLInputElement).type === 'file') return inp as HTMLInputElement;
+                }
+                const inTools = toolPic.querySelector('input[type="file"]') as HTMLInputElement | null;
+                if (inTools) return inTools;
+                const parent = toolPic.parentElement;
+                if (parent) {
+                    const siblingInput = parent.querySelector('input[type="file"]') as HTMLInputElement | null;
+                    if (siblingInput) return siblingInput;
+                }
+            }
             const uploader = document.querySelector('.bili-pics-uploader');
             if (uploader) {
                 const inUploader = uploader.querySelector('input[type="file"]') as HTMLInputElement | null;
@@ -210,22 +245,31 @@ export const bilibiliMomentPublisher = async (data) => {
             return null;
         };
 
-        await clickAddImage();
+        await clickToolbarPic();
+        await ensureUploaderVisible();
         let fileInput = findFileInput();
         if (!fileInput) {
+            await clickAddImage();
+            await sleep(400);
+            fileInput = findFileInput();
+        }
+        if (!fileInput) {
+            // 仅在发布区容器内搜索，避免宽泛选择器命中顶部导航「投稿」按钮
+            const publishingArea = document.querySelector('.bili-dyn-publishing') as Element | null;
             const addSelectors = [
                 '.bili-pics-uploader__add',
                 '.bili-pics-uploader [class*="add"]',
                 '.bili-dyn-publishing__tools__item.pic',
                 '[class*="bili-pics-uploader"] input[type="file"]',
-                '[class*="upload"]',
-                '[class*="picture"]',
-                '[class*="pic"]',
             ];
             for (const sel of addSelectors) {
-                const nodes = document.querySelectorAll(sel);
+                const scope = publishingArea ?? document;
+                const nodes = scope.querySelectorAll(sel);
                 for (let k = 0; k < nodes.length; k++) {
-                    const node = nodes[k] as HTMLElement;
+                    const node = nodes[k] as HTMLElement | null;
+                    if (!node || !node.tagName) continue;
+                    // 跳过带 href 的 <a> 标签，避免触发页面导航
+                    if (node.tagName === 'A' && (node as HTMLAnchorElement).href) continue;
                     if (node.tagName === 'INPUT') {
                         fileInput = node as HTMLInputElement;
                         break;
