@@ -14,31 +14,63 @@
  * limitations under the License.
  */
 <template>
-  <div></div>
+  <div class="popup-root">
+    <p>正在打开发布助手…</p>
+  </div>
 </template>
 
 <script lang="ts" setup>
-  import { ref, onMounted } from 'vue';
-  import { getPostBotBaseUrl } from '../config/config';
+  import { onMounted } from 'vue';
   import { appSettings } from '../config/setting';
 
-  // import type { PlasmoCSConfig } from 'plasmo';
-
-  // export const config: PlasmoCSConfig = {
-  //   // matches: ["https://www.plasmo.com/*"]
-  // };
-
   onMounted(() => {
-    // Load explore version setting and open the appropriate URL
     chrome.storage.local.get('exploreVersionEnabled', (result) => {
-      // Update appSettings with saved value
       if (result.exploreVersionEnabled !== undefined) {
         appSettings.value.exploreVersionEnabled = result.exploreVersionEnabled;
       }
-      // Now open the URL with the correct base URL
-      chrome.tabs.create({ url: `${getPostBotBaseUrl()}/exmay/postbot/media/publish` });
+      openPublishEntry();
     });
   });
+
+  function openPublishEntry() {
+    function tryOpenSidePanel(windowId: number) {
+      if (typeof chrome.sidePanel?.open !== 'function') {
+        openPublishInTab();
+        return;
+      }
+      chrome.sidePanel
+        .open({ windowId })
+        .then(() => {
+          window.close();
+        })
+        .catch(() => {
+          openPublishInTab();
+        });
+    }
+
+    // 先取「有标签页的当前窗口」：popup 打开时 getCurrent 可能是弹窗，用活动标签所在窗口更可靠
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      const windowId = tabs[0]?.windowId;
+      if (windowId != null) {
+        tryOpenSidePanel(windowId);
+        return;
+      }
+      // 没有活动标签（例如在 popup 窗口内）则用 getLastFocused 取最近使用的浏览器窗口
+      chrome.windows.getLastFocused((win) => {
+        if (win?.id != null && win.type === 'normal') {
+          tryOpenSidePanel(win.id);
+        } else {
+          openPublishInTab();
+        }
+      });
+    });
+  }
+
+  function openPublishInTab() {
+    // 侧边栏不可用时，在新标签页打开发布助手页面
+    chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') });
+    window.close();
+  }
 
 </script>
 

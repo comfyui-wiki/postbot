@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 export const getDocument = (html) => {
-    // 使用 DOMParser 将 HTML 字符串转换为 DOM 文档
+    if (html == null || typeof html !== 'string') {
+        return new DOMParser().parseFromString('', 'text/html');
+    }
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     return doc;

@@ -15,6 +15,7 @@
  */
 import { reactive } from "vue";
 
+import { fetchImageToBase64 } from "~utils/image";
 import { weixinArticlePublisher } from "./platform/article/weixin.publisher";
 import { toutiaoArticlePublisher } from "./platform/article/toutiao.publisher";
 import { xiaohongshuMomentPublisher } from "./platform/moment/xiaohongshu.publisher";
@@ -24,6 +25,7 @@ import { baijiahaoArticlePublisher } from "./platform/article/baijiahao.publishe
 import { qqOmArticlePublisher } from "./platform/article/qqOm.publisher";
 import { douyinArticlePublisher } from "./platform/article/douyin.publisher";
 import { bilibiliArticlePublisher } from "./platform/article/bilibili.publisher";
+import { bilibiliMomentPublisher } from "./platform/moment/bilibili.publisher";
 import { doubanArticlePublisher } from "./platform/article/douban.publisher";
 import { jianshuArticlePublisher } from "./platform/article/jianshu.publisher";
 import { zsxqArticlePublisher } from "./platform/article/zsxq.publisher";
@@ -82,7 +84,7 @@ export const publisher = reactive({
         weixin: weixinMomentPublisher,
         weixin_channels: weixinChannelsMomentPublisher,
         douyin: douyinMonmentPublisher,
-        bilibili: bilibiliArticlePublisher,
+        bilibili: bilibiliMomentPublisher,
         kuaishou: kuaishouMomentPublisher,
         douban: doubanMomentPublisher,
         zsxq: zsxqMonmentPublisher,
@@ -116,26 +118,51 @@ export const executeScriptsToTabs = (tabs, data) => {
             return;
         }
         chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-            console.log('tabId', tab.id);
-            console.log('info.status', info.status);
-            if (tabId === tab.id && info.status === 'complete') {
-                chrome.tabs.onUpdated.removeListener(listener);
-                console.log('tab.id', tab.id);
-                console.log('platform.type', platform.type);
-                console.log('platform.code', platform.code);
-                if (platform) {
-                    platform['executeScript'] = publisher[platform.type][platform.code] || publisher['article'][platform.code];
-                    const publisherData = {
-                        data: data?.data,
-                        platform: platform,
-                    };
-                    chrome.scripting.executeScript({
-                        target: { tabId: tab.id },
-                        func: platform.executeScript,
-                        args: [publisherData]
-                    });
+            if (tabId !== tab.id || info.status !== 'complete') return;
+            chrome.tabs.onUpdated.removeListener(listener);
+            if (!platform) return;
+            (async () => {
+                const type = platform.type || 'article';
+                const code = platform.code;
+                platform['executeScript'] = publisher[type]?.[code] || publisher['article']?.[code];
+                const payload = data?.data || {};
+                const publisherData = {
+                    data: {
+                        title: payload.title,
+                        content: payload.content,
+                        description: payload.description ?? payload.content,
+                        mediaType: payload.mediaType,
+                        platformCodes: payload.platformCodes,
+                        contentImages: payload.contentImages,
+                        images: payload.images,
+                        cover: payload.cover,
+                        isAutoPublish: payload.isAutoPublish,
+                    },
+                    platform: { type, code },
+                };
+                if (type === 'moment' && code === 'bilibili') {
+                    const urls: string[] = [];
+                    for (const x of payload.cover || []) {
+                        const u = typeof x === 'object' && x !== null && 'url' in x ? (x as { url?: string }).url : x;
+                        if (u) urls.push(String(u));
+                    }
+                    for (const x of payload.contentImages || payload.images || []) {
+                        const o = typeof x === 'object' && x !== null ? x as { url?: string; src?: string } : null;
+                        const u = o ? (o.url || o.src) : x;
+                        if (u) urls.push(String(u));
+                    }
+                    const settled = await Promise.allSettled(urls.map((u) => fetchImageToBase64(u)));
+                    const contentImagesData = settled
+                        .filter((r): r is PromiseFulfilledResult<NonNullable<Awaited<ReturnType<typeof fetchImageToBase64>>>> => r.status === 'fulfilled' && r.value != null)
+                        .map((r) => r.value);
+                    if (contentImagesData.length) publisherData.data.contentImagesData = contentImagesData;
                 }
-            }
+                chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: platform.executeScript,
+                    args: [publisherData],
+                });
+            })();
         });
     });
 }

@@ -65,7 +65,8 @@ export const getMetaInfoList = async () => {
                         return metaInfo;
                     }
                 } catch (e) {
-                    console.error('获取失败', e);
+                    const msg = e instanceof Error ? e.message : String(e);
+                    console.error('获取失败', key, msg, e);
                     return metaInfo;
                 }
             }

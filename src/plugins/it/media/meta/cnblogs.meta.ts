@@ -23,7 +23,9 @@ const Api = {
 };
 
 export const getCnBlogsMetaInfo = (html) => {
-
+    if (html == null || typeof html !== 'string') {
+        return null;
+    }
     const usernameRegex = /欢迎你，(\S+)\s*<\/h1>/;
     const usernameMatch = html.match(usernameRegex);
     const username = usernameMatch ? usernameMatch[1] : '';

@@ -451,8 +451,8 @@ export const platforms = reactive({
             status: 'enabled',
         }),
         bilibili: createPlatform('moment', 'bilibili', {
-            name: '哔哩哔哩(专栏)',
-            publishUrl: 'https://member.bilibili.com/platform/upload/text/edit',
+            name: '哔哩哔哩(动态)',
+            publishUrl: 'https://t.bilibili.com/',
             sort: 10,
             status: 'enabled',
         }),
@@ -483,7 +483,7 @@ export const platforms = reactive({
             status: 'enabled',
         }),
         bilibili: createPlatform('video', 'bilibili', {
-            name: '哔哩哔哩',
+            name: '哔哩哔哩(视频)',
             publishUrl: 'https://member.bilibili.com/platform/upload/video/frame',
             sort: 3,
             status: 'enabled',

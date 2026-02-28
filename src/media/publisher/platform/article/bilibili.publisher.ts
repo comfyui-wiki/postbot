@@ -18,8 +18,8 @@ export const bilibiliArticlePublisher = async (data) => {
 
     // const { contentData, processedData } = data;
 
-    const contentData = data?.data;
-    const processedData = data?.data;
+    const contentData = data?.data || {};
+    const processedData = { ...contentData, content: contentData?.content ?? contentData?.description, description: contentData?.description ?? contentData?.content };
 
     let editorDocument = null;
 
@@ -86,6 +86,7 @@ export const bilibiliArticlePublisher = async (data) => {
         title: 'div.bre-title-input textarea',
         editor: 'div[contenteditable="true"]',
         imageUpload: 'div.bre-settings__coverbox__img__icon',
+        imageUploadInput: 'input[type="file"]',
         imagePickerButtons: 'div.bre-modal button.bre-btn',
         imagePickerConfirmText: '确认',
         publishButtons: 'div.b-read-editor__btns button.bre-btn',
@@ -127,7 +128,7 @@ export const bilibiliArticlePublisher = async (data) => {
         }
         editor.focus();
 
-        const content = contentData?.content;
+        const content = (contentData?.content ?? contentData?.description) || '';
 
         if (editor.contentEditable === 'true') {
             editor.innerHTML = content;
@@ -211,17 +212,22 @@ export const bilibiliArticlePublisher = async (data) => {
 
     const uploadImages = async (images) => {
         console.log('images', images);
-        // const imageUpload = await observeElement(formElement.imageUpload);
-        // if (!imageUpload) {
-        //     throw new Error('未找到图片上传元素');
-        // }
-
-        const imageUpload = editorDocument.querySelector(formElement.imageUpload) as HTMLElement;
-        if (!imageUpload) {
-            throw new Error('未找到图片上传元素');
+        let fileInput = editorDocument.querySelector(formElement.imageUploadInput) as HTMLInputElement;
+        if (!fileInput) {
+            const coverBox = editorDocument.querySelector(formElement.imageUpload) as HTMLElement;
+            if (coverBox) {
+                coverBox.click();
+                await sleep(500);
+                fileInput = editorDocument.querySelector(formElement.imageUploadInput) as HTMLInputElement;
+            }
         }
-
-        console.log('imageUpload', imageUpload);
+        if (!fileInput) {
+            fileInput = document.querySelector(formElement.imageUploadInput) as HTMLInputElement;
+        }
+        if (!fileInput) {
+            console.warn('未找到封面上传 input[type=file]，跳过图片上传');
+            return;
+        }
 
         const dataTransfer = new DataTransfer();
 
@@ -229,31 +235,32 @@ export const bilibiliArticlePublisher = async (data) => {
             if (image.objectUrl) {
                 const response = await fetch(image.objectUrl);
                 const blob = await response.blob();
-    
-                const file = new File([blob], image.name, { type: image.type });
+                const file = new File([blob], image.name || 'image.jpg', { type: image.type || blob.type });
                 dataTransfer.items.add(file);
             } else {
                 const url = image?.url || image?.src;
-                const imageData = await fetchImage(url);
-    
-                let fileName = imageData.fileName;
-                if (!fileName) {
-                    fileName = getFileName(fileName, url);
+                if (!url) continue;
+                try {
+                    const imageData = await fetchImage(url);
+                    let fileName = imageData.fileName;
+                    if (!fileName) fileName = url.startsWith('data:') ? `${Date.now()}.jpg` : getFileName(fileName, url);
+                    const blob = new Blob([imageData.bits], { type: imageData.type });
+                    const file = new File([blob], fileName, { type: imageData.type });
+                    dataTransfer.items.add(file);
+                } catch (e) {
+                    console.warn('获取图片失败', url, e);
                 }
-    
-                const blob = new Blob([imageData.bits], { type: imageData.type });
-                const file = new File([blob], fileName, { type: imageData.type });
-                dataTransfer.items.add(file);
             }
         }
 
         if (dataTransfer.files.length === 0) {
-            console.error('上传文件失败');
+            console.error('无有效图片可上传');
             return;
         }
 
-        imageUpload.files = dataTransfer.files;
-        imageUpload.dispatchEvent(new Event('change', { bubbles: true }));
+        fileInput.files = dataTransfer.files;
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        fileInput.dispatchEvent(new Event('input', { bubbles: true }));
         await sleep(2000);
         console.log('图片上传成功');
     }
@@ -319,19 +326,25 @@ export const bilibiliArticlePublisher = async (data) => {
         }));
     }
 
+    await sleep(2500);
     await observeElement(formElement.editorIframe);
-    await sleep(1000);
+    await sleep(1500);
 
     editorDocument = getEditorDocument();
     
     await observeElement(formElement.editor);
 
-    autoFillContent(processedData);
-    await sleep(5000);
-
-    if (processedData?.cover) {
-        autoFillCover(processedData.cover);
+    const coverList = processedData?.cover?.length
+        ? processedData.cover
+        : (processedData?.contentImages || processedData?.images || []);
+    if (coverList?.length) {
+        const covers = coverList.map((img) => (typeof img === 'object' && img !== null ? img : { url: img }));
+        await autoFillCover(covers);
+        await sleep(2000);
     }
+
+    autoFillContent(processedData);
+    await sleep(2000);
 
     if (contentData.isAutoPublish) {
         await sleep(5000);

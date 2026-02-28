@@ -26,39 +26,50 @@ import { windowPublish } from "~media/publisher";
 
 import { isLoginApi } from "~api/media/user.api";
 
+const safeSendResponse = (sendResponse, payload) => {
+    try {
+        sendResponse(payload);
+    } catch (e) {
+        console.error('[PostBot] sendResponse error', e);
+    }
+};
+
 export const handleMessage = async (request, sender, sendResponse) => {
     let message = {};
     const data = request?.data;
-    switch (request.action) {
-        case POSTBOT_ACTION.CHECK_EXTENSION:
-            message = {
-                extensionId: chrome.runtime.id,
-                // enabled: enabled,
-            };
-            sendResponse(message);
-            break;
-        case POSTBOT_ACTION.PLATFORM_LIST:
-            const platforms = getPlatforms();
-            console.log('platforms', platforms);
-            message = {
-                platforms: platforms[data?.type],
+    try {
+        switch (request.action) {
+            case POSTBOT_ACTION.CHECK_EXTENSION:
+                message = {
+                    extensionId: chrome.runtime.id,
+                };
+                safeSendResponse(sendResponse, message);
+                break;
+            case POSTBOT_ACTION.PLATFORM_LIST: {
+                const platforms = getPlatforms();
+                const byType = platforms?.[data?.type];
+                const list = Array.isArray(byType) ? byType : Object.values(byType ?? {});
+                message = { platforms: list };
+                safeSendResponse(sendResponse, message);
+                break;
             }
-            sendResponse(message);
-            break;
-        case POSTBOT_ACTION.META_INFO_LIST:
-
-            // chrome.runtime.sendMessage({ action: 'getMetaInfoList' }, (response) => {
-            //   console.log('response', response);
-            const metaInfoList = await getMetaInfoList();
-            state.metaInfoList = metaInfoList;
-            message = {
-                metaInfoList: metaInfoList,
+            case POSTBOT_ACTION.META_INFO_LIST: {
+                const metaInfoList = await getMetaInfoList();
+                state.metaInfoList = metaInfoList;
+                const codes = Object.keys(metaInfoList ?? {});
+                const platformsByType = getPlatforms();
+                const names = codes.map((code) => {
+                    for (const type of ['article', 'moment', 'video']) {
+                        const p = platformsByType?.[type]?.[code];
+                        if (p && (p.name || p.platformName)) return p.name || p.platformName;
+                    }
+                    return code;
+                });
+                console.log('[PostBot] 已获取平台登录信息:', names.join('、'), `(${codes.length} 个)`);
+                message = { metaInfoList: metaInfoList ?? {} };
+                safeSendResponse(sendResponse, message);
+                break;
             }
-            console.log('message', message);
-            sendResponse(message);
-            // return true;
-            // });
-            break;
         case POSTBOT_ACTION.PUBLISH_SYNC_DATA:
             console.debug('request.data', request.data);
             state.contentData = request.data;
@@ -71,30 +82,45 @@ export const handleMessage = async (request, sender, sendResponse) => {
 
             state.contentData = null;
             break;
-        case POSTBOT_ACTION.PUBLISH_NOW:
-            const mediaType = data.mediaType || 'article'
+        case POSTBOT_ACTION.PUBLISH_NOW: {
+            const mediaType = data.mediaType || 'article';
             const platformCodes = data.platformCodes;
-            console.debug('platformCodes', platformCodes);
+            console.debug('[PostBot] PUBLISH_NOW mediaType', mediaType, 'platformCodes', platformCodes);
+            state.contentData = data;
             const publishPlatforms = getPlatforms();
-            console.debug('publishPlatforms', publishPlatforms);
+            const byType = publishPlatforms[mediaType];
+            if (!byType) {
+                console.warn('[PostBot] 未找到内容类型:', mediaType);
+                break;
+            }
+            const allPlatforms = Array.isArray(byType) ? byType : Object.values(byType);
+            let checkedPlatforms = allPlatforms.filter((item) => platformCodes.includes(item.code));
+            console.debug('[PostBot] 本次发布平台', checkedPlatforms.map((p) => p.code));
 
-            let allPlatforms = Object.values(publishPlatforms[mediaType]);
-            const checkedPlatforms = allPlatforms.filter(item => platformCodes.includes(item.code));
-            console.debug('checkedPlatforms', checkedPlatforms);
-
-            checkedPlatforms.forEach(item => {
-                item['metaInfo'] = state.metaInfoList[item.code];
+            const BILIBILI_PUBLISH_URLS = {
+                moment: 'https://t.bilibili.com/',
+                article: 'https://member.bilibili.com/platform/upload/text/edit',
+                video: 'https://member.bilibili.com/platform/upload/video/frame',
+            };
+            checkedPlatforms = checkedPlatforms.map((item) => {
+                const next = { ...item, metaInfo: state.metaInfoList[item.code] };
+                if (item.code === 'bilibili' && BILIBILI_PUBLISH_URLS[mediaType]) {
+                    next.publishUrl = BILIBILI_PUBLISH_URLS[mediaType];
+                }
+                return next;
             });
 
             const publishData = {
                 platforms: checkedPlatforms,
                 data: data,
-            }
+            };
             windowPublish(publishData);
             break;
+        }
         case 'fetchImage':
+            // Keep channel open for async sendResponse
             let imageType = null;
-            fetch(data.imageUrl)
+            fetch(data?.imageUrl)
                 .then((response) => {
                     const imageName = getFileName(response);
                     // 获取图片的 Blob
@@ -123,16 +149,20 @@ export const handleMessage = async (request, sender, sendResponse) => {
                     console.error('获取图片失败:', error);
                     sendResponse({ error: error.message });
                 });
-            break;
-        case 'checkLogin':
+            return true; // keep channel open for async sendResponse
+        case 'checkLogin': {
             const res = await isLoginApi({});
             console.debug('res', res);
-            sendResponse({
-                isLogin: res?.data?.login,
-            });
+            safeSendResponse(sendResponse, { isLogin: res?.data?.login });
             break;
+        }
         default:
+            safeSendResponse(sendResponse, {});
             break;
+        }
+    } catch (err) {
+        console.error('[PostBot] handleMessage error', request?.action, err);
+        safeSendResponse(sendResponse, { error: err?.message || String(err) });
     }
 }
 
