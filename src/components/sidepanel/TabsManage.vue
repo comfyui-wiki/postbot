@@ -217,10 +217,12 @@ const removeImage = (index: number) => {
 // ── 草稿助手 ────────────────────────────────────────────────────────────
 const createNewDraft = () => {
   localPublish.value.content = '';
-  localPublish.value.platformCodes = [];
   platformContents.value = {};
   synced.value = true;
-  activePlatform.value = null;
+  // 保留当前平台选择，activePlatform 若已在列表中则不动，否则取第一个
+  if (!localPublish.value.platformCodes.includes(activePlatform.value ?? '')) {
+    activePlatform.value = localPublish.value.platformCodes[0] ?? null;
+  }
   selectedDraftId.value = null;
 };
 
@@ -262,8 +264,6 @@ const saveDraft = () => {
   
   if (existingIndex > -1) {
     updated[existingIndex] = draft;
-    const [item] = updated.splice(existingIndex, 1);
-    updated.unshift(item);
   } else {
     updated = [draft, ...drafts.value.slice(0, 49)];
   }
