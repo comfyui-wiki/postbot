@@ -239,12 +239,17 @@ export const xiaohongshuMomentPublisher = async (data) => {
 
         const editorPasteEvent = pasteEvent();
         const rawContent = contentData?.content ?? '';
-        const htmlWithBreaks = typeof rawContent === 'string' ? rawContent.replace(/\n/g, '<br>') : rawContent;
-        const plainWithNewlines = typeof rawContent === 'string'
+        // 判断是否已是 HTML；若是则直接使用，若是纯文本则将每行包成 <p> 段落
+        // （XHS 的富文本编辑器会丢弃裸 <br> 标签，但能正确识别 <p> 段落创建换行）
+        const isHtml = /<[a-z][^>]*>/i.test(rawContent);
+        const htmlContent = isHtml
+            ? rawContent
+            : rawContent.split('\n').map(line => `<p>${line || '<br>'}</p>`).join('');
+        const plainContent = isHtml
             ? rawContent.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '').trim()
-            : '';
-        editorPasteEvent.clipboardData.setData('text/html', htmlWithBreaks);
-        editorPasteEvent.clipboardData.setData('text/plain', plainWithNewlines);
+            : rawContent;
+        editorPasteEvent.clipboardData.setData('text/html', htmlContent);
+        editorPasteEvent.clipboardData.setData('text/plain', plainContent);
         editor.dispatchEvent(editorPasteEvent);
         editor.dispatchEvent(new Event('input', { bubbles: true }));
         editor.dispatchEvent(new Event('change', { bubbles: true }));
