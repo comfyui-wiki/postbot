@@ -54,7 +54,14 @@ export const getMetaInfoList = async () => {
             const meta = metaInfoList[key];
             if (meta != null) {
                 try {
-                    const mediaInfo = await meta?.getMediaInfo();
+                    // 为每个平台的检测设置 5 秒超时，防止单个平台挂起导致全局失败
+                    const mediaInfoPromise = meta?.getMediaInfo();
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout')), 5000)
+                    );
+                    
+                    const mediaInfo = await Promise.race([mediaInfoPromise, timeoutPromise]);
+                    
                     if (mediaInfo) {
                         mediaInfo[key] = key;
                         const metaInfo = {
@@ -66,7 +73,7 @@ export const getMetaInfoList = async () => {
                     }
                 } catch (e) {
                     const msg = e instanceof Error ? e.message : String(e);
-                    console.error('获取失败', key, msg, e);
+                    console.error('获取失败', key, msg);
                     return metaInfo;
                 }
             }
@@ -75,7 +82,7 @@ export const getMetaInfoList = async () => {
     );
 
     const metaInfos = results.reduce((acc, currentData) => {
-        return { ...acc, ...currentData };  // 使用展开运算符合并对象
+        return { ...acc, ...currentData };
     }, {});
 
     return metaInfos;
