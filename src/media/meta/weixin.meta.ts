@@ -26,10 +26,10 @@ const getMatchData = (match) => {
 }
 
 const parserUsrInfo = (script) => {
-    const match = script.match(/window\.wx\.commonData\s*=\s*\{([\s\S]*?)\};/);
+    const match = script && script.match(/window\.wx\.commonData\s*=\s*\{([\s\S]*?)\};/);
 
     console.log('match', match);
-    if (!match) {
+    if (!match || match[1] == null) {
         throw new Error('获取登录信息失败');
     }
 

@@ -39,13 +39,15 @@ export const initContextMenusEvent = () => {
   });
 
   const handelSyncData = async (info, tab) => {
-
     const res = await isLoginApi({});
     console.log('res', res);
     if (!res?.data?.login) {
-      chrome.tabs.sendMessage(tab.id, { action: "doLogin" }, (response) => {
-        console.log(response.data);  // 在这里处理返回的数据
-      });
+      // 本地发布模式：不打开 postbot 登录页，改为打开发布侧栏
+      try {
+        await chrome.sidePanel?.open({ windowId: (await chrome.windows.getCurrent()).id });
+      } catch {
+        chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') });
+      }
       return;
     }
 
