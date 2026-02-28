@@ -141,26 +141,32 @@ export const executeScriptsToTabs = (tabs, data) => {
                     platform: { type, code },
                 };
                 if (type === 'moment' && code === 'bilibili') {
-                    const urls: string[] = [];
+                    const urlSet = new Set<string>();
                     for (const x of payload.cover || []) {
                         const u = typeof x === 'object' && x !== null && 'url' in x ? (x as { url?: string }).url : x;
-                        if (u) urls.push(String(u));
+                        if (u) urlSet.add(String(u));
                     }
                     for (const x of payload.contentImages || payload.images || []) {
                         const o = typeof x === 'object' && x !== null ? x as { url?: string; src?: string } : null;
                         const u = o ? (o.url || o.src) : x;
-                        if (u) urls.push(String(u));
+                        if (u) urlSet.add(String(u));
                     }
+                    const urls = Array.from(urlSet);
                     const settled = await Promise.allSettled(urls.map((u) => fetchImageToBase64(u)));
                     const contentImagesData = settled
                         .filter((r): r is PromiseFulfilledResult<NonNullable<Awaited<ReturnType<typeof fetchImageToBase64>>>> => r.status === 'fulfilled' && r.value != null)
                         .map((r) => r.value);
                     if (contentImagesData.length) publisherData.data.contentImagesData = contentImagesData;
                 }
+                // 哔哩哔哩动态发布需要在 MAIN 世界运行：
+                // B站通过创建游离（非DOM）的 input[type=file] 并调用 .click() 来触发文件选择，
+                // 只有在 MAIN 世界才能拦截 HTMLInputElement.prototype.click 注入图片文件。
+                const scriptWorld = (type === 'moment' && code === 'bilibili') ? 'MAIN' : undefined;
                 chrome.scripting.executeScript({
                     target: { tabId: tab.id },
                     func: platform.executeScript,
                     args: [publisherData],
+                    world: scriptWorld as chrome.scripting.ExecutionWorld,
                 });
             })();
         });
