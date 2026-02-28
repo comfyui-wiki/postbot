@@ -37,7 +37,7 @@
     <Teleport to="body">
       <PlatformModal
         v-if="showPlatformModal"
-        :options="platformOptions"
+        :options="availablePlatformsForModal"
         :selectedCodes="localPublish.platformCodes"
         :getPlatformColor="platformColor"
         :getPlatformInitial="platformInitial"
@@ -136,22 +136,32 @@ const drafts = ref<Draft[]>([]);
 
 // ── 计算属性 ────────────────────────────────────────────────────────────────
 const enabledPlatforms = computed(() => {
-  try {
-    const options = platformOptions.value;
-    const codes = localPublish.value.platformCodes;
-    if (!Array.isArray(options)) {
-      console.warn('[PostBot] platformOptions is not an array:', options);
-      return [];
-    }
-    if (!Array.isArray(codes)) {
-      console.warn('[PostBot] platformCodes is not an array:', codes);
-      return [];
-    }
+  const codes = localPublish.value.platformCodes;
+  if (!Array.isArray(codes) || codes.length === 0) return [];
+
+  const options = platformOptions.value;
+  if (Array.isArray(options) && options.length > 0) {
     return options.filter((p) => p && p.value && codes.includes(p.value));
-  } catch (e) {
-    console.error('[PostBot] Error in enabledPlatforms computed:', e);
-    return [];
   }
+
+  // 检测结果未加载时，用 PLATFORM_META 兜底，保证图标正常显示
+  return codes
+    .filter((code) => PLATFORM_META[code])
+    .map((code) => ({ label: PLATFORM_META[code].label, value: code }));
+});
+
+// 用于 PlatformModal 的平台选项（所有已登录或可用的平台）
+const availablePlatformsForModal = computed(() => {
+  const options = platformOptions.value;
+  if (Array.isArray(options) && options.length > 0) {
+    return options;
+  }
+
+  // 检测结果未加载时，显示所有 PLATFORM_META 里的平台供用户选择
+  return Object.entries(PLATFORM_META).map(([code, meta]) => ({
+    label: meta.label,
+    value: code,
+  }));
 });
 
 const currentContent = computed<string>({
@@ -195,14 +205,19 @@ const togglePlatform = (code: string) => {
 
 const toggleSync = () => {
   if (!synced.value) {
+    // 从独立模式切回同步模式：合并所有平台内容到全局
+    // （这里简单地选择当前激活平台的内容作为新的全局草稿）
     if (activePlatform.value && platformContents.value[activePlatform.value]) {
       localPublish.value.content = platformContents.value[activePlatform.value];
     }
+    platformContents.value = {};
     synced.value = true;
   } else {
+    // 从同步模式切到独立模式：给每个平台复制一份当前的全局草稿作为初始内容
     const base = localPublish.value.content;
     const seeded: Record<string, string> = {};
     for (const p of enabledPlatforms.value) {
+      // 保留已有的独立内容，或用全局草稿初始化
       seeded[p.value] = platformContents.value[p.value] ?? base;
     }
     platformContents.value = seeded;

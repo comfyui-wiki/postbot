@@ -1,52 +1,41 @@
 <template>
   <div class="main">
-    <!-- Top bar with Publish/Schedule -->
-    <div class="top-bar">
-      <div class="top-bar-left">
-        <div class="publish-on-hint" v-if="enabledPlatforms.length">
-          发布至 
-          <span v-for="p in enabledPlatforms" :key="p.value" class="mini-p-icon" :style="{ background: getPlatformColor(p.value) }">
-            {{ getPlatformInitial(p.value) }}
-          </span>
-        </div>
+    <!-- Platform Tabs Bar -->
+    <div class="platform-tabs-bar" v-if="enabledPlatforms.length">
+      <div class="platforms-list">
+        <button
+          v-for="p in enabledPlatforms"
+          :key="p.value"
+          class="platform-tab-btn"
+          :class="{ active: activePlatform === p.value }"
+          @click="$emit('update:activePlatform', p.value)"
+          :title="p.label"
+        >
+          <span class="p-dot">{{ getPlatformInitial(p.value) }}</span>
+        </button>
+        <button class="platform-tab-btn more" @click="$emit('open-platforms')" title="选择更多平台">···</button>
       </div>
-      <div class="top-bar-right">
-        <div class="sync-toggle" :class="{ active: synced }" @click="$emit('toggle-sync')" title="同步所有平台文案">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
-          </svg>
-          <span>同步</span>
-        </div>
+      <div class="spacer"></div>
+      <div class="top-bar-actions">
         <button class="schedule-btn" @click="$emit('schedule')">定时发布</button>
         <button class="publish-btn" @click="$emit('publish')" :disabled="!enabledPlatforms.length">立即发布</button>
-        <button class="p-settings-btn" @click="$emit('open-platforms')" title="选择发布平台">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-        </button>
       </div>
     </div>
 
     <!-- Editor Canvas -->
     <div class="editor-canvas">
       <div class="editor-container">
-        <!-- Platform Switcher -->
-        <div class="editor-platform-tabs" v-if="!synced && enabledPlatforms.length > 1">
-          <button 
-            v-for="p in enabledPlatforms" 
-            :key="p.value"
-            class="platform-tab"
-            :class="{ active: activePlatform === p.value }"
-            @click="$emit('update:activePlatform', p.value)"
-          >
-            <span class="p-dot sm" :style="{ background: getPlatformColor(p.value) }">{{ getPlatformInitial(p.value) }}</span>
-            {{ p.label }}
-          </button>
-        </div>
-
         <div class="writing-area">
+          <!-- Sync Mode Toggle -->
+          <div v-if="enabledPlatforms.length > 1" class="sync-mode-banner">
+            <span class="sync-label">Sync with {{ enabledPlatforms.find(p => p.value === activePlatform)?.label || 'PostBot' }}</span>
+            <button class="sync-switch" :class="{ active: synced }" @click="$emit('toggle-sync')" :title="synced ? '切换为独立编辑' : '切换为同步模式'">
+              <span class="switch-circle"></span>
+            </button>
+          </div>
+
           <div class="author-info" v-if="activePlatform">
-            <div class="p-dot" :style="{ background: getPlatformColor(activePlatform) }">{{ getPlatformInitial(activePlatform) }}</div>
+            <div class="p-dot p-dot-large">{{ getPlatformInitial(activePlatform) }}</div>
             <div class="author-details">
               <div class="author-name">{{ enabledPlatforms.find(p => p.value === activePlatform)?.label || 'PostBot' }}</div>
               <div class="author-handle">@postbot</div>
@@ -167,63 +156,143 @@ watch(() => props.activePlatform, () => {
   position: relative;
 }
 
-.top-bar {
-  height: 64px;
-  padding: 0 24px;
+.platform-tabs-bar {
+  height: 56px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   border-bottom: 1px solid @border-vis;
+  background: rgba(255, 255, 255, 0.01);
 }
 
-.publish-on-hint {
-  font-size: 12px;
-  color: @muted;
+.platforms-list {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 0 1 auto;
+
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+  }
 }
 
-.mini-p-icon {
-  width: 16px; height: 16px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 8px; color: #fff; font-weight: 700;
-}
-
-.top-bar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.sync-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: @muted;
-  padding: 6px 12px;
-  border-radius: 20px;
+.platform-tab-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: #3f3f46;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.2s;
-  &:hover { background: rgba(255,255,255,0.05); }
-  &.active { color: #10b981; background: rgba(16,185,129,0.1); }
+
+  &:hover {
+    background: #52525b;
+  }
+
+  &.active {
+    border-color: @accent;
+    background: #52525b;
+  }
+
+  &.more {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e4e4e7;
+  }
+}
+
+.spacer {
+  flex: 1;
+}
+
+.sync-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  margin: 16px 0;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+}
+
+.sync-label {
+  font-size: 13px;
+  color: #e4e4e7;
+  flex: 1;
+}
+
+.sync-switch {
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  background: #3f3f46;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 0.2s;
+
+  &:hover {
+    background: #52525b;
+  }
+
+  &.active {
+    background: #10b981;
+  }
+
+  .switch-circle {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    position: absolute;
+    left: 2px;
+    transition: left 0.2s;
+  }
+
+  &.active .switch-circle {
+    left: 22px;
+  }
+}
+
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .schedule-btn {
   background: #f59e0b; color: #fff; border: none;
   padding: 8px 16px; border-radius: 20px; font-weight: 600; cursor: pointer;
+  font-size: 13px;
 }
 
 .publish-btn {
   background: @accent; color: #fff; border: none;
   padding: 8px 20px; border-radius: 20px; font-weight: 600; cursor: pointer;
+  font-size: 13px;
   &:disabled { opacity: 0.5; cursor: not-allowed; }
-}
-
-.p-settings-btn {
-  background: transparent; border: none; color: @muted; cursor: pointer;
-  &:hover { color: @text; }
 }
 
 .editor-canvas {
@@ -239,24 +308,11 @@ watch(() => props.activePlatform, () => {
   max-width: 600px;
 }
 
-.editor-platform-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-}
-
-.platform-tab {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 12px; border-radius: 20px; border: 1px solid @border;
-  background: transparent; color: @muted; font-size: 12px; cursor: pointer;
-  &.active { background: @surface; color: @text; border-color: @muted; }
-}
 
 .writing-area { background: transparent; }
 
 .author-info {
   display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
-  .p-dot { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
   .author-name { font-weight: 700; font-size: 15px; }
   .author-handle { color: @muted; font-size: 13px; }
 }
@@ -314,7 +370,13 @@ watch(() => props.activePlatform, () => {
 
 .p-dot {
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff;
-  &.sm { width: 20px; height: 20px; font-size: 8px; }
+  width: 100%; height: 100%;
+  border-radius: 50%; font-size: 13px; font-weight: 700; color: #e4e4e7;
+  background: #3f3f46;
+}
+
+.p-dot-large {
+  width: 40px; height: 40px;
+  font-size: 16px;
 }
 </style>
