@@ -42,6 +42,17 @@
             </div>
           </div>
 
+          <!-- Title Input (for platforms that need it) -->
+          <input
+            v-if="activePlatformNeedsTitle"
+            type="text"
+            class="title-input"
+            :value="title"
+            @input="onTitleInput"
+            placeholder="添加标题"
+            :disabled="synced"
+          />
+
           <textarea
             ref="textareaRef"
             class="main-editor"
@@ -87,25 +98,28 @@ import { ref, computed, watch, nextTick } from 'vue';
 
 const props = defineProps<{
   content: string;
+  title: string;
   synced: boolean;
   enabledPlatforms: any[];
   activePlatform: string | null;
   imageUrls: string[];
   mediaType: string;
   isFirstPlatform: boolean;
+  activePlatformNeedsTitle: boolean;
   getPlatformColor: (code: string) => string;
   getPlatformInitial: (code: string) => string;
 }>();
 
 const emit = defineEmits([
-  'update:content', 
-  'update:activePlatform', 
+  'update:content',
+  'update:title',
+  'update:activePlatform',
   'update:mediaType',
-  'toggle-sync', 
-  'publish', 
-  'schedule', 
-  'open-platforms', 
-  'add-image', 
+  'toggle-sync',
+  'publish',
+  'schedule',
+  'open-platforms',
+  'add-image',
   'remove-image'
 ]);
 
@@ -128,6 +142,11 @@ const onInput = (e: Event) => {
   const val = (e.target as HTMLTextAreaElement).value;
   emit('update:content', val);
   autoResize();
+};
+
+const onTitleInput = (e: Event) => {
+  const val = (e.target as HTMLInputElement).value;
+  emit('update:title', val);
 };
 
 const onMediaTypeChange = (e: Event) => {
@@ -318,6 +337,27 @@ watch(() => props.activePlatform, () => {
   display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
   .author-name { font-weight: 700; font-size: 15px; }
   .author-handle { color: @muted; font-size: 13px; }
+}
+
+.title-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: @text;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 0 0 12px 0;
+  border-bottom: 1px solid @border;
+  margin-bottom: 16px;
+
+  &::placeholder { color: #3f3f46; }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: #a1a1a6;
+  }
 }
 
 .main-editor {

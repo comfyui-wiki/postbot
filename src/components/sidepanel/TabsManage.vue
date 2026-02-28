@@ -18,12 +18,14 @@
     <!-- 编辑器区域 -->
     <EditorArea
       v-model:content="currentContent"
+      v-model:title="localPublish.title"
       v-model:activePlatform="activePlatform"
       v-model:mediaType="localPublish.mediaType"
       :synced="activePlatform !== localPublish.platformCodes[0] && platformSyncStatus[activePlatform || ''] !== false"
       :enabledPlatforms="enabledPlatforms"
       :imageUrls="localImageDataUrls"
       :isFirstPlatform="activePlatform === localPublish.platformCodes[0]"
+      :activePlatformNeedsTitle="PLATFORM_META[activePlatform || '']?.needsTitle ?? false"
       :getPlatformColor="platformColor"
       :getPlatformInitial="platformInitial"
       @toggle-sync="toggleSync"
@@ -79,14 +81,14 @@ const STORAGE_KEY = 'postbot_local_publish_state';
 const DRAFTS_KEY  = 'postbot_drafts';
 
 // ── 平台元数据 ───────────────────────────────────────────────────────
-const PLATFORM_META: Record<string, { color: string; initial: string; label: string }> = {
-  bilibili:        { color: '#00A1D6', initial: 'B', label: 'Bilibili' },
-  xiaohongshu:     { color: '#FF2442', initial: '红', label: '小红书' },
+const PLATFORM_META: Record<string, { color: string; initial: string; label: string; needsTitle?: boolean }> = {
+  bilibili:        { color: '#00A1D6', initial: 'B', label: 'Bilibili', needsTitle: true },
+  xiaohongshu:     { color: '#FF2442', initial: '红', label: '小红书', needsTitle: true },
   weibo:           { color: '#E6162D', initial: '微', label: '微博' },
   douyin:          { color: '#161823', initial: '抖', label: '抖音' },
   weixin:          { color: '#07C160', initial: '信', label: '微信公众号' },
   weixin_channels: { color: '#07C160', initial: '视', label: '视频号' },
-  zhihu:           { color: '#0084FF', initial: '知', label: '知乎' },
+  zhihu:           { color: '#0084FF', initial: '知', label: '知乎', needsTitle: true },
   toutiao:         { color: '#FE5B22', initial: '头', label: '今日头条' },
   baijiahao:       { color: '#2932E1', initial: '百', label: '百家号' },
   kuaishou:        { color: '#FF4906', initial: '快', label: '快手' },
