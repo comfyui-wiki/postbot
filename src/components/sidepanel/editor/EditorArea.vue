@@ -17,7 +17,6 @@
       </div>
       <div class="spacer"></div>
       <div class="top-bar-actions">
-        <button class="schedule-btn" @click="$emit('schedule')">定时发布</button>
         <button class="publish-btn" @click="$emit('publish')" :disabled="!enabledPlatforms.length">立即发布</button>
       </div>
     </div>
@@ -137,7 +136,6 @@ const emit = defineEmits([
   'update:mediaType',
   'toggle-sync',
   'publish',
-  'schedule',
   'open-platforms',
   'add-image',
   'remove-image',

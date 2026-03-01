@@ -30,7 +30,6 @@
       :getPlatformInitial="platformInitial"
       @toggle-sync="toggleSync"
       @publish="triggerPublishNow"
-      @schedule="onSchedule"
       @open-platforms="openPlatforms"
       @add-image="onAddImage"
       @remove-image="removeImage"
@@ -223,7 +222,6 @@ const currentContent = computed<string>({
 });
 
 // ── 方法 ─────────────────────────────────────────────────────────────────
-const onSchedule  = () => { alert('定时发布功能正在开发中，敬请期待！'); };
 const onAddImage  = () => { if (localImageInputRef.value) localImageInputRef.value.click(); };
 const openPlatforms  = () => { showPlatformModal.value = true; };
 const closePlatforms = () => { showPlatformModal.value = false; };
