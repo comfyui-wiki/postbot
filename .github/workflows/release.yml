@@ -1,0 +1,124 @@
+name: Auto Release on Version Change
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'package.json'
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version-changed: ${{ steps.version.outputs.changed }}
+      current-version: ${{ steps.version.outputs.current }}
+      previous-version: ${{ steps.version.outputs.previous }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check version change
+        id: version
+        run: |
+          CURRENT=$(jq -r '.version' package.json)
+          PREVIOUS=$(git show HEAD~1:package.json 2>/dev/null | jq -r '.version' 2>/dev/null || echo "0.0.0")
+
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          echo "previous=$PREVIOUS" >> $GITHUB_OUTPUT
+
+          if [ "$CURRENT" != "$PREVIOUS" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✓ Version changed: $PREVIOUS → $CURRENT"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "✗ No version change detected"
+          fi
+
+  build:
+    needs: check-and-release
+    if: needs.check-and-release.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build extension
+        run: pnpm run build
+
+      - name: Package extension
+        run: pnpm run package
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: postbot-builds
+          path: build/
+          retention-days: 1
+
+  release:
+    needs: [check-and-release, build]
+    if: needs.check-and-release.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: postbot-builds
+          path: build/
+
+      - name: Create Release and Tag
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.check-and-release.outputs.current-version }}
+          name: Release v${{ needs.check-and-release.outputs.current-version }}
+          body: |
+            # PostBot v${{ needs.check-and-release.outputs.current-version }}
+
+            **Version Update**: ${{ needs.check-and-release.outputs.previous-version }} → ${{ needs.check-and-release.outputs.current-version }}
+
+            ## 📦 Build Artifacts
+
+            - **Chrome/Edge**: `postbot-chrome-v${{ needs.check-and-release.outputs.current-version }}.zip`
+            - **Firefox**: `postbot-firefox-v${{ needs.check-and-release.outputs.current-version }}.zip`
+
+            ## 📥 Installation
+
+            1. Download the appropriate extension package for your browser
+            2. Extract the zip file
+            3. Open your browser's extension management page
+              - Chrome: `chrome://extensions`
+              - Firefox: `about:addons`
+            4. Enable "Developer mode" and load the unpacked extension
+
+            ---
+            *This release was automatically created by detecting a version change in package.json*
+          files: |
+            build/chrome-mv3-prod.zip
+            build/firefox-mv2-prod.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
