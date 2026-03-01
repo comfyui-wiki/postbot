@@ -83,9 +83,19 @@
             <button class="reload-btn" @click="$emit('reload-images')">重新加载</button>
           </div>
 
-          <!-- Media Previews -->
+          <!-- Media Previews with Drag & Drop Sorting -->
           <div class="media-grid" v-if="imageUrls.length">
-            <div class="media-item" v-for="(url, i) in imageUrls" :key="i">
+            <div
+              class="media-item"
+              v-for="(url, i) in imageUrls"
+              :key="i"
+              draggable="true"
+              @dragstart="onImageDragStart($event, i)"
+              @dragover="onImageDragOver($event, i)"
+              @drop="onImageDrop($event, i)"
+              @dragend="onImageDragEnd"
+              :class="{ 'dragging': draggedIndex === i, 'drag-over': dragOverIndex === i }"
+            >
               <img :src="url" />
               <button class="media-remove" @click="$emit('remove-image', i)">✕</button>
             </div>
@@ -148,10 +158,13 @@ const emit = defineEmits([
   'open-platforms',
   'add-image',
   'remove-image',
-  'reload-images'
+  'reload-images',
+  'reorder-images'
 ]);
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const draggedIndex = ref<number | null>(null);
+const dragOverIndex = ref<number | null>(null);
 
 const editorPlaceholder = computed(() => {
   if (props.synced) return '写点什么...';
@@ -179,6 +192,44 @@ const onTitleInput = (e: Event) => {
 
 const onMediaTypeChange = (e: Event) => {
   emit('update:mediaType', (e.target as HTMLSelectElement).value);
+};
+
+const onImageDragStart = (e: DragEvent, index: number) => {
+  draggedIndex.value = index;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+  }
+};
+
+const onImageDragOver = (e: DragEvent, index: number) => {
+  e.preventDefault();
+  dragOverIndex.value = index;
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move';
+  }
+};
+
+const onImageDrop = (e: DragEvent, targetIndex: number) => {
+  e.preventDefault();
+  const fromIndex = draggedIndex.value;
+  if (fromIndex === null || fromIndex === targetIndex) {
+    draggedIndex.value = null;
+    dragOverIndex.value = null;
+    return;
+  }
+
+  // Reorder the images
+  const newImageUrls = [...props.imageUrls];
+  const [movedImage] = newImageUrls.splice(fromIndex, 1);
+  newImageUrls.splice(targetIndex, 0, movedImage);
+
+  emit('update:content', props.content); // Trigger parent update with new order
+  emit('reorder-images', { from: fromIndex, to: targetIndex, newOrder: newImageUrls });
+};
+
+const onImageDragEnd = () => {
+  draggedIndex.value = null;
+  dragOverIndex.value = null;
 };
 
 watch(() => props.content, () => {
@@ -514,8 +565,32 @@ watch(() => props.activePlatform, () => {
 }
 
 .media-item {
-  position: relative; border-radius: 12px; overflow: hidden; aspect-ratio: 1;
-  img { width: 100%; height: 100%; object-fit: cover; }
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 1;
+  cursor: grab;
+  transition: all 0.2s ease;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &.dragging {
+    opacity: 0.5;
+    transform: scale(0.95);
+  }
+
+  &.drag-over {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 2px #3b82f6, 0 0 12px rgba(59, 130, 246, 0.3);
+  }
 }
 
 .media-remove {

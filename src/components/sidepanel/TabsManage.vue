@@ -34,6 +34,7 @@
       @add-image="onAddImage"
       @remove-image="removeImage"
       @reload-images="quickReloadImages"
+      @reorder-images="reorderImages"
     />
 
     <!-- 弹窗组件（Teleport 到 body 避免层叠上下文问题） -->
@@ -276,6 +277,10 @@ const toggleSync = () => {
 
 const removeImage = (index: number) => {
   localImageDataUrls.value.splice(index, 1);
+};
+
+const reorderImages = (payload: { from: number; to: number; newOrder: string[] }) => {
+  localImageDataUrls.value = payload.newOrder;
 };
 
 /**
