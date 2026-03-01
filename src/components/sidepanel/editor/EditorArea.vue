@@ -7,11 +7,12 @@
           v-for="p in enabledPlatforms"
           :key="p.value"
           class="platform-tab-btn"
-          :class="{ active: activePlatform === p.value }"
+          :class="{ active: activePlatform === p.value, warning: platformLimitStatus?.[p.value] }"
           @click="$emit('update:activePlatform', p.value)"
-          :title="p.label"
+          :title="`${p.label}${platformLimitStatus?.[p.value] ? ' ⚠️ 内容不符合平台限制' : ''}`"
         >
           {{ getPlatformInitial(p.value) }}
+          <span v-if="platformLimitStatus?.[p.value]" class="warning-indicator">⚠️</span>
         </button>
         <button class="platform-tab-btn more" @click="$emit('open-platforms')" title="选择更多平台">···</button>
       </div>
@@ -40,6 +41,18 @@
             <button class="sync-switch" :class="{ active: synced }" @click="$emit('toggle-sync')" :title="synced ? '切换为独立编辑' : '切换为同步模式'">
               <span class="switch-circle"></span>
             </button>
+          </div>
+
+          <!-- Platform Limit Warnings -->
+          <div v-if="platformLimitWarnings && platformLimitWarnings.length > 0" class="platform-limit-warning">
+            <div class="warning-header">
+              <span class="warning-icon">⚠️</span>
+              <span class="warning-title">内容不符合该平台的限制</span>
+            </div>
+            <ul class="warning-list">
+              <li v-for="(warning, index) in platformLimitWarnings" :key="index">{{ warning }}</li>
+            </ul>
+            <p class="warning-hint">建议切换为独立编辑模式，为该平台专门调整内容</p>
           </div>
 
           <div class="author-info" v-if="activePlatform">
@@ -144,6 +157,8 @@ const props = defineProps<{
   isFirstPlatform: boolean;
   activePlatformNeedsTitle: boolean;
   draftImageMetadata?: ImageMetadata[];
+  platformLimitWarnings?: string[];
+  platformLimitStatus?: Record<string, boolean>;
   getPlatformColor: (code: string) => string;
   getPlatformInitial: (code: string) => string;
 }>();
@@ -355,6 +370,28 @@ watch(() => props.activePlatform, () => {
     font-weight: 600;
     color: #e4e4e7;
   }
+
+  &.warning {
+    position: relative;
+    background: #92400e;
+
+    &:hover {
+      background: #b45309;
+    }
+
+    .warning-indicator {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      font-size: 12px;
+      animation: pulse 2s infinite;
+    }
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .spacer {
@@ -409,6 +446,54 @@ watch(() => props.activePlatform, () => {
     position: absolute;
     left: 2px;
     transition: left 0.2s;
+  }
+
+  &.active .switch-circle {
+    left: 22px;
+  }
+}
+
+.platform-limit-warning {
+  padding: 12px;
+  margin: 16px 0;
+  border-radius: 8px;
+  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.2);
+  color: #fbbf24;
+
+  .warning-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+
+    .warning-icon {
+      font-size: 14px;
+    }
+
+    .warning-title {
+      font-size: 13px;
+      font-weight: 600;
+    }
+  }
+
+  .warning-list {
+    margin: 0 0 8px 0;
+    padding-left: 20px;
+    font-size: 12px;
+    color: #fbbf24;
+
+    li {
+      margin: 4px 0;
+      line-height: 1.4;
+    }
+  }
+
+  .warning-hint {
+    font-size: 11px;
+    color: #d97706;
+    margin: 0;
+    line-height: 1.3;
   }
 
   &.active .switch-circle {

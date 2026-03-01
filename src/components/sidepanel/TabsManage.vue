@@ -26,6 +26,8 @@
       :isFirstPlatform="activePlatform === localPublish.platformCodes[0]"
       :activePlatformNeedsTitle="PLATFORM_META[activePlatform || '']?.needsTitle ?? false"
       :draftImageMetadata="selectedDraftImageMetadata"
+      :platformLimitWarnings="platformLimitWarnings"
+      :platformLimitStatus="platformLimitStatus"
       :getPlatformColor="platformColor"
       :getPlatformInitial="platformInitial"
       @toggle-sync="toggleSync"
@@ -63,6 +65,7 @@ import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import { POSTBOT_ACTION } from '~message/postbot.action';
 import { getImageMetadata, fileToDataUrl, isImageMatch } from '~utils/imageStorage';
 import { saveImageBlob, getImageBlobs, deleteAllImageBlobs, fileToDataUrl as dbFileToDataUrl } from '~utils/imageDatabase';
+import { hasPlatformLimitViolation, checkPlatformLimits, getPlatformLimits } from '~config/platform-limits';
 
 // 导入子组件
 import DraftList from './drafts/DraftList.vue';
@@ -184,7 +187,7 @@ const enabledPlatforms = computed(() => {
 // 用于 PlatformModal 的平台选项（始终显示所有 PLATFORM_META 里的平台）
 const availablePlatformsForModal = computed(() => {
   // 始终显示所有平台，检测结果只用来标记哪些已登录
-  return Object.entries(PLATFORM_META).map(([code, meta]) => {
+  const result = Object.entries(PLATFORM_META).map(([code, meta]) => {
     const detected = platformOptions.value.find((p) => p.value === code);
     return {
       label: meta.label,
@@ -192,6 +195,8 @@ const availablePlatformsForModal = computed(() => {
       link: detected?.link || platformUrl(code),
     };
   });
+  console.log('[PostBot] availablePlatformsForModal:', result.length, '个平台');
+  return result;
 });
 
 const currentContent = computed<string>({
@@ -280,6 +285,38 @@ const currentImages = computed<string[]>({
       platformImages.value = { ...platformImages.value, [activePlatform.value]: val };
     }
   },
+});
+
+// 平台内容限制检查 - 返回当前平台的限制违规列表
+const platformLimitWarnings = computed(() => {
+  if (!activePlatform.value) return [];
+  return checkPlatformLimits(
+    activePlatform.value,
+    localPublish.value.mediaType as 'moment' | 'article' | 'video',
+    currentTitle.value,
+    currentContent.value,
+    currentImages.value.length
+  );
+});
+
+// 当前平台是否有限制违规
+const hasPlatformLimitWarning = computed(() => {
+  return platformLimitWarnings.value.length > 0;
+});
+
+// 返回所有已启用平台的限制违规情况（用于平台标签提示）
+const platformLimitStatus = computed(() => {
+  const status: Record<string, boolean> = {};
+  for (const platform of enabledPlatforms.value) {
+    status[platform.value] = hasPlatformLimitViolation(
+      platform.value,
+      localPublish.value.mediaType as 'moment' | 'article' | 'video',
+      currentTitle.value,
+      currentContent.value,
+      currentImages.value.length
+    );
+  }
+  return status;
 });
 
 // ── 方法 ─────────────────────────────────────────────────────────────────
