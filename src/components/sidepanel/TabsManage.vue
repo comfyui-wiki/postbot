@@ -17,12 +17,12 @@
     <!-- 编辑器区域 -->
     <EditorArea
       v-model:content="currentContent"
-      v-model:title="localPublish.title"
+      v-model:title="currentTitle"
       v-model:activePlatform="activePlatform"
       v-model:mediaType="localPublish.mediaType"
       :synced="activePlatform !== localPublish.platformCodes[0] && platformSyncStatus[activePlatform || ''] !== false"
       :enabledPlatforms="enabledPlatforms"
-      :imageUrls="localImageDataUrls"
+      :imageUrls="currentImages"
       :isFirstPlatform="activePlatform === localPublish.platformCodes[0]"
       :activePlatformNeedsTitle="PLATFORM_META[activePlatform || '']?.needsTitle ?? false"
       :draftImageMetadata="selectedDraftImageMetadata"
@@ -122,6 +122,8 @@ const selectedDraftId   = ref<string | null>(null);
 // 各平台的独立同步状态：key=platform code, value=是否与第一个平台同步
 const platformSyncStatus = ref<Record<string, boolean>>({}); // 默认所有平台都同步
 const platformContents = ref<Record<string, string>>({}); // 仅当平台取消同步时才存储独立内容
+const platformTitles = ref<Record<string, string>>({}); // 平台独立标题
+const platformImages = ref<Record<string, string[]>>({}); // 平台独立图片列表
 
 // ── 表单状态 ──────────────────────────────────────────────────────────────
 const platformOptions       = ref<{ label: string; value: string; link?: string }[]>([]);
@@ -155,6 +157,8 @@ type Draft = {
   platforms: string[];
   platformCodes: string[];
   platformData?: Record<string, string>;
+  platformTitles?: Record<string, string>;
+  platformImages?: Record<string, string[]>;
   isSynced?: boolean;
   title?: string;
   imageMetadata?: ImageMetadata[];
@@ -222,6 +226,62 @@ const currentContent = computed<string>({
   },
 });
 
+// 标题 computed 属性 - 支持平台独立编辑
+const currentTitle = computed<string>({
+  get() {
+    if (!activePlatform.value) return localPublish.value.title;
+    const isFirstPlatform = activePlatform.value === localPublish.value.platformCodes[0];
+    const isSynced = platformSyncStatus.value[activePlatform.value] !== false;
+
+    if (isFirstPlatform || isSynced) {
+      return localPublish.value.title;
+    }
+    return platformTitles.value[activePlatform.value] ?? localPublish.value.title;
+  },
+  set(val: string) {
+    if (!activePlatform.value) {
+      localPublish.value.title = val;
+      return;
+    }
+    const isFirstPlatform = activePlatform.value === localPublish.value.platformCodes[0];
+    const isSynced = platformSyncStatus.value[activePlatform.value] !== false;
+
+    if (isFirstPlatform || isSynced) {
+      localPublish.value.title = val;
+    } else {
+      platformTitles.value = { ...platformTitles.value, [activePlatform.value]: val };
+    }
+  },
+});
+
+// 图片列表 computed 属性 - 支持平台独立编辑
+const currentImages = computed<string[]>({
+  get() {
+    if (!activePlatform.value) return localImageDataUrls.value;
+    const isFirstPlatform = activePlatform.value === localPublish.value.platformCodes[0];
+    const isSynced = platformSyncStatus.value[activePlatform.value] !== false;
+
+    if (isFirstPlatform || isSynced) {
+      return localImageDataUrls.value;
+    }
+    return platformImages.value[activePlatform.value] ?? localImageDataUrls.value;
+  },
+  set(val: string[]) {
+    if (!activePlatform.value) {
+      localImageDataUrls.value = val;
+      return;
+    }
+    const isFirstPlatform = activePlatform.value === localPublish.value.platformCodes[0];
+    const isSynced = platformSyncStatus.value[activePlatform.value] !== false;
+
+    if (isFirstPlatform || isSynced) {
+      localImageDataUrls.value = val;
+    } else {
+      platformImages.value = { ...platformImages.value, [activePlatform.value]: val };
+    }
+  },
+});
+
 // ── 方法 ─────────────────────────────────────────────────────────────────
 const onAddImage  = () => { if (localImageInputRef.value) localImageInputRef.value.click(); };
 const openPlatforms  = () => { showPlatformModal.value = true; };
@@ -232,12 +292,25 @@ const togglePlatform = (code: string) => {
   const idx = arr.indexOf(code);
   if (idx === -1) {
     arr.push(code);
-    if (!platformContents.value[code]) {
-      platformContents.value = { ...platformContents.value, [code]: localPublish.value.content };
-    }
+    // Initialize content, title, and images for new platform (synced by default)
+    // They won't be used unless the platform is switched to independent mode
     if (!activePlatform.value) activePlatform.value = code;
   } else {
     arr.splice(idx, 1);
+    // Clean up platform-specific data when removing platform
+    const newContents = { ...platformContents.value };
+    const newTitles = { ...platformTitles.value };
+    const newImages = { ...platformImages.value };
+    const newStatus = { ...platformSyncStatus.value };
+    delete newContents[code];
+    delete newTitles[code];
+    delete newImages[code];
+    delete newStatus[code];
+    platformContents.value = newContents;
+    platformTitles.value = newTitles;
+    platformImages.value = newImages;
+    platformSyncStatus.value = newStatus;
+
     if (activePlatform.value === code) {
       activePlatform.value = arr[0] ?? null;
     }
@@ -254,20 +327,34 @@ const toggleSync = () => {
   const isSynced = platformSyncStatus.value[activePlatform.value] !== false;
 
   if (isSynced) {
-    // 从同步切到独立：保存当前全局文案作为该平台的初始独立文案
+    // 从同步切到独立：保存当前全局文案、标题、图片作为该平台的初始独立内容
     platformContents.value = {
       ...platformContents.value,
       [activePlatform.value]: localPublish.value.content
+    };
+    platformTitles.value = {
+      ...platformTitles.value,
+      [activePlatform.value]: localPublish.value.title
+    };
+    platformImages.value = {
+      ...platformImages.value,
+      [activePlatform.value]: [...localImageDataUrls.value]
     };
     platformSyncStatus.value = {
       ...platformSyncStatus.value,
       [activePlatform.value]: false
     };
   } else {
-    // 从独立切回同步：删除该平台的独立内容
+    // 从独立切回同步：删除该平台的独立内容（文案、标题、图片）
     const newPlatformContents = { ...platformContents.value };
+    const newPlatformTitles = { ...platformTitles.value };
+    const newPlatformImages = { ...platformImages.value };
     delete newPlatformContents[activePlatform.value];
+    delete newPlatformTitles[activePlatform.value];
+    delete newPlatformImages[activePlatform.value];
     platformContents.value = newPlatformContents;
+    platformTitles.value = newPlatformTitles;
+    platformImages.value = newPlatformImages;
     platformSyncStatus.value = {
       ...platformSyncStatus.value,
       [activePlatform.value]: true
@@ -276,11 +363,11 @@ const toggleSync = () => {
 };
 
 const removeImage = (index: number) => {
-  localImageDataUrls.value.splice(index, 1);
+  currentImages.value.splice(index, 1);
 };
 
 const reorderImages = (payload: { from: number; to: number; newOrder: string[] }) => {
-  localImageDataUrls.value = payload.newOrder;
+  currentImages.value = payload.newOrder;
 };
 
 /**
@@ -338,7 +425,7 @@ const quickReloadImages = () => {
 
       // 替换图片
       if (newDataUrls.length > 0) {
-        localImageDataUrls.value = newDataUrls;
+        currentImages.value = newDataUrls;
         selectedDraftImageMetadata.value = []; // 清除丢失的图片提示
       }
 
@@ -357,6 +444,8 @@ const createNewDraft = () => {
   selectedDraftId.value = newDraftId;
   localPublish.value.content = '';
   platformContents.value = {};
+  platformTitles.value = {};
+  platformImages.value = {};
   platformSyncStatus.value = {}; // 重置所有平台为同步状态
   localImageDataUrls.value = []; // 清除图片
   selectedDraftImageMetadata.value = []; // 清除丢失图片提示
@@ -400,10 +489,15 @@ const saveDraft = async () => {
   if (!content) return;
 
   const platformData: Record<string, string> = {};
-  // 保存所有非同步平台的独立内容
+  const platformTitleData: Record<string, string> = {};
+  const platformImageData: Record<string, string[]> = {};
+
+  // 保存所有非同步平台的独立内容、标题和图片
   for (const code of localPublish.value.platformCodes) {
     if (platformSyncStatus.value[code] === false) {
       platformData[code] = platformContents.value[code] || content;
+      platformTitleData[code] = platformTitles.value[code] || localPublish.value.title;
+      platformImageData[code] = platformImages.value[code] || localImageDataUrls.value;
     }
   }
 
@@ -421,6 +515,8 @@ const saveDraft = async () => {
     platforms: enabledPlatforms.value.map((p) => p.label),
     platformCodes: [...localPublish.value.platformCodes],
     platformData,
+    platformTitles: Object.keys(platformTitleData).length > 0 ? platformTitleData : undefined,
+    platformImages: Object.keys(platformImageData).length > 0 ? platformImageData : undefined,
     isSynced: !hasIndependent,
     title: localPublish.value.title || undefined,
     imageMetadata: localImageDataUrls.value.length > 0 ? localImageDataUrls.value.map((_, i) => ({
@@ -445,7 +541,7 @@ const saveDraft = async () => {
 };
 
 watch(
-  [() => localPublish.value.content, () => localPublish.value.platformCodes, () => localPublish.value.title, platformContents, platformSyncStatus, localImageDataUrls],
+  [() => localPublish.value.content, () => localPublish.value.platformCodes, () => localPublish.value.title, platformContents, platformTitles, platformImages, platformSyncStatus, localImageDataUrls],
   () => {
     if (localPublish.value.content.trim()) saveDraft().catch(err => console.error('[PostBot] 自动保存草稿失败:', err));
   },
@@ -486,10 +582,12 @@ const loadDraft = async (d: Draft) => {
     localImageDataUrls.value = [];
   }
 
-  // Restore platform-level sync status and platform-specific content
+  // Restore platform-level sync status and platform-specific content, titles, and images
   if (d.platformData && !d.isSynced) {
     // Some platforms were independent when saved
     platformContents.value = { ...d.platformData };
+    platformTitles.value = d.platformTitles ? { ...d.platformTitles } : {};
+    platformImages.value = d.platformImages ? { ...d.platformImages } : {};
     // Mark only independent platforms in sync status (false = independent)
     platformSyncStatus.value = {};
     for (const code of d.platformCodes) {
@@ -498,6 +596,8 @@ const loadDraft = async (d: Draft) => {
   } else {
     // All platforms synced
     platformContents.value = {};
+    platformTitles.value = {};
+    platformImages.value = {};
     platformSyncStatus.value = {};
     for (const code of d.platformCodes) {
       platformSyncStatus.value[code] = true; // all synced
@@ -783,36 +883,48 @@ const triggerPublishNow = () => {
   }
 
   if (!validCodes.length) return;
-  const urls = [...(imageUrls || '').split(/[\r\n]+/).map((s) => s.trim()).filter(Boolean), ...localImageDataUrls.value];
-  const contentImages = urls.map((src) => ({ src }));
-  const cover = urls.length ? urls : undefined;
 
-  // Build platform-specific content mapping
+  // Build platform-specific content, title, and images mapping
   const platformSpecificContents: Record<string, string> = {};
+  const platformSpecificTitles: Record<string, string> = {};
+  const platformSpecificImages: Record<string, { src: string }[]> = {};
+
   for (const code of validCodes) {
     // Check sync status to determine which content to use
     const isIndependent = platformSyncStatus.value[code] === false;
+
     if (isIndependent) {
-      // Independent mode: use platform-specific content
+      // Independent mode: use platform-specific content, title, and images
       platformSpecificContents[code] = platformContents.value[code] || localPublish.value.content;
+      platformSpecificTitles[code] = platformTitles.value[code] || localPublish.value.title;
+      const images = platformImages.value[code] || localImageDataUrls.value;
+      platformSpecificImages[code] = images.map((src) => ({ src }));
     } else {
-      // Synced mode: use global content
+      // Synced mode: use global content, title, and images
       platformSpecificContents[code] = localPublish.value.content;
+      platformSpecificTitles[code] = localPublish.value.title;
+      platformSpecificImages[code] = localImageDataUrls.value.map((src) => ({ src }));
     }
   }
 
-  // Send once with all platforms and their specific content mapping
+  // Get global images for fallback
+  const urls = [...(imageUrls || '').split(/[\r\n]+/).map((s) => s.trim()).filter(Boolean), ...localImageDataUrls.value];
+  const cover = urls.length ? urls : undefined;
+
+  // Send once with all platforms and their specific content/title/images mapping
   chrome.runtime.sendMessage({
     type: 'request',
     action: POSTBOT_ACTION.PUBLISH_NOW,
     data: {
       mediaType,
       platformCodes: validCodes,
-      title,
+      title: localPublish.value.title,
       content: localPublish.value.content,
-      platformSpecificContents, // New: map of platform code -> custom content
-      contentImages: contentImages.length ? contentImages : undefined,
-      images: contentImages.length ? contentImages : undefined,
+      platformSpecificContents,
+      platformSpecificTitles,
+      platformSpecificImages,
+      contentImages: localImageDataUrls.value.map((src) => ({ src })),
+      images: localImageDataUrls.value.map((src) => ({ src })),
       cover,
       isAutoPublish: false
     }
