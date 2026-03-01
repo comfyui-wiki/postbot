@@ -11,7 +11,7 @@
           @click="$emit('update:activePlatform', p.value)"
           :title="p.label"
         >
-          <span class="p-dot">{{ getPlatformInitial(p.value) }}</span>
+          {{ getPlatformInitial(p.value) }}
         </button>
         <button class="platform-tab-btn more" @click="$emit('open-platforms')" title="选择更多平台">···</button>
       </div>
@@ -235,21 +235,24 @@ watch(() => props.activePlatform, () => {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: none;
   background: #3f3f46;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e4e4e7;
 
   &:hover {
     background: #52525b;
   }
 
   &.active {
-    border-color: @accent;
-    background: #52525b;
+    background: #e4e4e7;
+    color: #09090b;
   }
 
   &.more {
