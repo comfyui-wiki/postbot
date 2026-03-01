@@ -156,18 +156,17 @@ const enabledPlatforms = computed(() => {
     .map((code) => ({ label: PLATFORM_META[code].label, value: code }));
 });
 
-// 用于 PlatformModal 的平台选项（所有已登录或可用的平台）
+// 用于 PlatformModal 的平台选项（始终显示所有 PLATFORM_META 里的平台）
 const availablePlatformsForModal = computed(() => {
-  const options = platformOptions.value;
-  if (Array.isArray(options) && options.length > 0) {
-    return options;
-  }
-
-  // 检测结果未加载时，显示所有 PLATFORM_META 里的平台供用户选择
-  return Object.entries(PLATFORM_META).map(([code, meta]) => ({
-    label: meta.label,
-    value: code,
-  }));
+  // 始终显示所有平台，检测结果只用来标记哪些已登录
+  return Object.entries(PLATFORM_META).map(([code, meta]) => {
+    const detected = platformOptions.value.find((p) => p.value === code);
+    return {
+      label: meta.label,
+      value: code,
+      link: detected?.link || '#',
+    };
+  });
 });
 
 const currentContent = computed<string>({
@@ -715,6 +714,18 @@ const loadMetaInfoList = async () => {
       metaInfoSuccess.value = `检测成功！已发现 ${loggedInCodes.length} 个登录账号。`;
     } else {
       console.log('[PostBot] 未发现已登录平台');
+      // 即使没有检测到已登录平台，也要保存检测结果（空列表）以标记已检测过
+      chrome.storage.local.set({
+        'postbot_detected_platforms': {
+          options: [],
+          links: [],
+          loggedInCodes: [],
+          lastDetected: Date.now()
+        }
+      });
+      platformOptions.value = [];
+      loggedInPlatformCodes.value = [];
+      loggedInPlatformLinks.value = [];
       metaInfoSuccess.value = '';
       metaInfoError.value = '未检测到已登录账号。请先在浏览器中登录微博、知乎或小红书等平台，然后再次点击检测。';
     }
