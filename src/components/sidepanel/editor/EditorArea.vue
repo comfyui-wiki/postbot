@@ -48,7 +48,7 @@
             class="title-input"
             :value="title"
             @input="onTitleInput"
-            placeholder="添加标题"
+            :placeholder="getTitlePlaceholder()"
             :disabled="synced"
           />
 
@@ -81,23 +81,51 @@
               <button class="media-remove" @click="$emit('remove-image', i)">✕</button>
             </div>
           </div>
+
+          <!-- Video Preview (for video media type) -->
+          <div v-if="mediaType === 'video'" class="video-section">
+            <div v-if="videoUrl" class="video-preview">
+              <video :src="videoUrl" controls style="width: 100%; max-height: 300px;"></video>
+              <div class="video-info">
+                <span v-if="videoFile" class="video-file">📹 {{ videoFile.name }}</span>
+                <span v-if="videoSize" class="video-size">{{ formatFileSize(videoSize) }}</span>
+                <span v-if="videoDuration" class="video-duration">{{ formatDuration(videoDuration) }}</span>
+              </div>
+              <button class="video-remove-btn" @click="$emit('remove-video')" title="移除视频">移除视频</button>
+            </div>
+            <div v-else class="video-upload-prompt">
+              <div class="prompt-icon">🎥</div>
+              <div class="prompt-text">点击下方上传视频文件</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Floating Toolbar -->
     <div class="floating-toolbar">
-      <button class="float-btn" @click="$emit('add-image')" title="添加图片">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <button
+        class="float-btn"
+        @click="mediaType === 'video' ? $emit('add-video') : $emit('add-image')"
+        :title="mediaType === 'video' ? '添加视频' : '添加图片'"
+      >
+        <svg v-if="mediaType === 'video'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="23 7 16 12 23 17 23 7"></polygon>
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+        </svg>
+        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
         </svg>
       </button>
       <div class="v-divider"></div>
-      <select class="type-select" :value="mediaType" @change="onMediaTypeChange">
-        <option value="moment">动态</option>
-        <option value="article">文章</option>
-        <option value="video">视频</option>
-      </select>
+      <div class="media-type-selector">
+        <label class="media-type-label">{{ getMediaTypeLabel() }}</label>
+        <select class="type-select" :value="mediaType" @change="onMediaTypeChange" title="切换内容类型">
+          <option value="moment">动态</option>
+          <option value="article">文章</option>
+          <option value="video">视频</option>
+        </select>
+      </div>
       <div class="v-divider"></div>
       <div class="char-count">{{ content.length }} 字</div>
     </div>
@@ -125,6 +153,10 @@ const props = defineProps<{
   isFirstPlatform: boolean;
   activePlatformNeedsTitle: boolean;
   draftImageMetadata?: ImageMetadata[];
+  videoUrl?: string;
+  videoFile?: File | null;
+  videoDuration?: number;
+  videoSize?: number;
   getPlatformColor: (code: string) => string;
   getPlatformInitial: (code: string) => string;
 }>();
@@ -139,16 +171,72 @@ const emit = defineEmits([
   'open-platforms',
   'add-image',
   'remove-image',
-  'reload-images'
+  'reload-images',
+  'add-video',
+  'remove-video'
 ]);
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
 const editorPlaceholder = computed(() => {
-  if (props.synced) return '写点什么...';
+  if (props.synced) return getPlaceholderByType();
   const p = props.enabledPlatforms.find((p: any) => p.value === props.activePlatform);
-  return p ? ('正在为 ' + p.label + ' 编写独立文案...') : '写点什么...';
+  return p ? ('正在为 ' + p.label + ' 编写独立' + getContentTypeLabel() + '...') : getPlaceholderByType();
 });
+
+const getContentTypeLabel = () => {
+  const typeMap: Record<string, string> = {
+    article: '文章',
+    moment: '动态',
+    video: '视频'
+  };
+  return typeMap[props.mediaType] || '内容';
+};
+
+const getPlaceholderByType = () => {
+  const placeholders: Record<string, string> = {
+    article: '写点文章内容...',
+    moment: '分享点什么吧...',
+    video: '视频标题或描述...'
+  };
+  return placeholders[props.mediaType] || '写点什么...';
+};
+
+const getTitlePlaceholder = () => {
+  const placeholders: Record<string, string> = {
+    article: '添加文章标题',
+    moment: '添加动态标题',
+    video: '添加视频标题'
+  };
+  return placeholders[props.mediaType] || '添加标题';
+};
+
+const getMediaTypeLabel = () => {
+  const typeMap: Record<string, string> = {
+    article: '📄 文章',
+    moment: '💬 动态',
+    video: '🎥 视频'
+  };
+  return typeMap[props.mediaType] || '📝 内容';
+};
+
+const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+};
+
+const formatDuration = (seconds: number) => {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
 const autoResize = () => {
   const el = textareaRef.value;
@@ -494,7 +582,40 @@ watch(() => props.activePlatform, () => {
 
 .float-btn { background: transparent; border: none; color: @muted; cursor: pointer; &:hover { color: @text; } }
 .v-divider { width: 1px; height: 20px; background: @border; }
-.type-select { background: transparent; border: none; color: @muted; font-size: 12px; cursor: pointer; outline: none; }
+.type-select {
+  background: transparent;
+  border: none;
+  color: @text;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &:focus {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.media-type-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.media-type-label {
+  font-size: 12px;
+  color: @muted;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .char-count { font-size: 12px; color: @muted; font-variant-numeric: tabular-nums; }
 
 .p-dot {
@@ -507,5 +628,67 @@ watch(() => props.activePlatform, () => {
 .p-dot-large {
   width: 40px; height: 40px;
   font-size: 16px;
+}
+
+.video-section {
+  margin-top: 16px;
+  border: 1px solid @border;
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.video-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.video-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: @muted;
+
+  .video-file {
+    font-weight: 500;
+    color: @text;
+  }
+
+  .video-size, .video-duration {
+    font-size: 11px;
+  }
+}
+
+.video-remove-btn {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
+}
+
+.video-upload-prompt {
+  text-align: center;
+  padding: 24px 12px;
+  color: @muted;
+
+  .prompt-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+
+  .prompt-text {
+    font-size: 13px;
+  }
 }
 </style>

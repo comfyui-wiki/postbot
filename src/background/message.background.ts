@@ -26,6 +26,9 @@ import { windowPublish } from "~media/publisher";
 
 import { isLoginApi } from "~api/media/user.api";
 
+// Global state for storing pending video file
+let pendingVideoFile: File | null = null;
+
 const safeSendResponse = (sendResponse, payload) => {
     try {
         sendResponse(payload);
@@ -175,7 +178,49 @@ export const handleMessage = async (request, sender, sendResponse) => {
                 platforms: checkedPlatforms,
                 data: data,
             };
+
+            // Store the video file if present
+            if (data.videoData && mediaType === 'video') {
+                // The File object will be passed by the content script via chrome.runtime.sendMessage
+                // We store it in memory for later retrieval
+                console.log('[PostBot] 准备发布视频，视频元数据:', data.videoData);
+            }
+
             windowPublish(publishData);
+            break;
+        }
+        case 'STORE_PENDING_VIDEO_FILE': {
+            // Called from side panel to store the File object in memory
+            if (!isFromExtensionPage(sender)) {
+                console.warn('[PostBot] 仅接受来自扩展侧栏的视频文件存储请求，已忽略');
+                break;
+            }
+            // Store the File object in memory for later retrieval by content script
+            pendingVideoFile = data?.videoFile || null;
+            if (pendingVideoFile) {
+                console.log('[PostBot] 视频文件已存储 (来自侧栏):', pendingVideoFile.name, pendingVideoFile.size);
+            }
+            safeSendResponse(sendResponse, { success: true });
+            break;
+        }
+        case 'GET_PENDING_VIDEO_FILE': {
+            // Called from content script to retrieve the stored File object
+            if (pendingVideoFile) {
+                console.log('[PostBot] 返回待发布视频文件 (来自内容脚本):', pendingVideoFile.name);
+                safeSendResponse(sendResponse, {
+                    file: pendingVideoFile,
+                    success: true
+                });
+                // Clear after retrieval
+                pendingVideoFile = null;
+            } else {
+                console.warn('[PostBot] 未找到待发布的视频文件');
+                safeSendResponse(sendResponse, {
+                    file: null,
+                    success: false,
+                    error: '未找到待发布的视频文件'
+                });
+            }
             break;
         }
         case 'fetchImage':

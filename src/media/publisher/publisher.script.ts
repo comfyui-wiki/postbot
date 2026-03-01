@@ -138,6 +138,7 @@ export const executeScriptsToTabs = (tabs, data) => {
                         contentImages: payload.contentImages,
                         images: payload.images,
                         cover: payload.cover,
+                        videoData: payload.videoData, // Add video data for video publishing
                         isAutoPublish: payload.isAutoPublish,
                     },
                     platform: { type, code },

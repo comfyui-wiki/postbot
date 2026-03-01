@@ -276,13 +276,17 @@ export const bilibiliVideoPublisher = async (data) => {
 
         console.log('videoUpload', videoUpload);
 
-        // const blob = new Blob([videoData.videoBuffer], { type: videoData.type });
+        // Get the File object from background script state
+        const fileResponse = await chrome.runtime.sendMessage({
+            type: 'get',
+            action: 'GET_PENDING_VIDEO_FILE'
+        });
 
-        const response = await fetch(videoData.objectUrl);
-        const blob = await response.blob();
+        if (!fileResponse?.file) {
+            throw new Error('无法获取视频文件，请重新上传');
+        }
 
-        const file = new File([blob], videoData.name, { type: videoData.type });
-
+        const file = fileResponse.file;
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(file);
 
