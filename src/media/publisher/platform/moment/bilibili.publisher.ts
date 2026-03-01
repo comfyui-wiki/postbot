@@ -70,9 +70,19 @@ export const bilibiliMomentPublisher = async (data) => {
 
     await sleep(2000);
 
-    const text =
-        (contentData.title ? contentData.title + '\n\n' : '') +
-        (contentData.content || contentData.description || '').replace(/<[^>]+>/g, '').trim();
+    // Fill in title field if available
+    if (contentData.title) {
+        const titleInput = document.querySelector('.bili-dyn-publishing__title__input') as HTMLInputElement | null;
+        if (titleInput) {
+            titleInput.value = contentData.title;
+            titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+            titleInput.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(300);
+        }
+    }
+
+    // Fill in content/description field
+    const text = (contentData.content || contentData.description || '').replace(/<[^>]+>/g, '').trim();
 
     let input: HTMLElement | null = null;
     const inputSelectors = [
@@ -102,7 +112,7 @@ export const bilibiliMomentPublisher = async (data) => {
     } else if (!text) {
         return;
     } else {
-        console.warn('[PostBot] B站动态: 未找到输入框，请手动粘贴内容');
+        console.warn('[PostBot] B站动态: 未找到内容输入框，请手动粘贴内容');
     }
 
     // Pre-fetched images from background (preferred, no messaging)
