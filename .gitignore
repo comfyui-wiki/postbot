@@ -46,4 +46,6 @@ tsconfig.tsbuildinfo
 
 ._*
 .gitcoffee
-.playwright-mcp.claude
+.playwright-mcp
+
+.claude
