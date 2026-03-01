@@ -790,8 +790,15 @@ const triggerPublishNow = () => {
   // Build platform-specific content mapping
   const platformSpecificContents: Record<string, string> = {};
   for (const code of validCodes) {
-    // If platform is independent, use its custom content; otherwise use global content
-    platformSpecificContents[code] = platformContents.value[code] ?? localPublish.value.content;
+    // Check sync status to determine which content to use
+    const isIndependent = platformSyncStatus.value[code] === false;
+    if (isIndependent) {
+      // Independent mode: use platform-specific content
+      platformSpecificContents[code] = platformContents.value[code] || localPublish.value.content;
+    } else {
+      // Synced mode: use global content
+      platformSpecificContents[code] = localPublish.value.content;
+    }
   }
 
   // Send once with all platforms and their specific content mapping
