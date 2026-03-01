@@ -345,14 +345,33 @@ const quickReloadImages = () => {
 
 // ── 草稿助手 ────────────────────────────────────────────────────────────
 const createNewDraft = () => {
+  const newDraftId = Date.now().toString();
+  selectedDraftId.value = newDraftId;
   localPublish.value.content = '';
   platformContents.value = {};
   platformSyncStatus.value = {}; // 重置所有平台为同步状态
+  localImageDataUrls.value = []; // 清除图片
+  selectedDraftImageMetadata.value = []; // 清除丢失图片提示
+  localPublish.value.title = ''; // 清除标题
+
   // 保留当前平台选择，activePlatform 若已在列表中则不动，否则取第一个
   if (!localPublish.value.platformCodes.includes(activePlatform.value ?? '')) {
     activePlatform.value = localPublish.value.platformCodes[0] ?? null;
   }
-  selectedDraftId.value = null;
+
+  // 立即创建空白草稿条目
+  const emptyDraft: Draft = {
+    id: newDraftId,
+    content: '',
+    time: Date.now(),
+    platforms: enabledPlatforms.value.map((p) => p.label),
+    platformCodes: [...localPublish.value.platformCodes],
+    platformData: {},
+    isSynced: true,
+  };
+
+  drafts.value = [emptyDraft, ...drafts.value.slice(0, 49)];
+  chrome.storage.local.set({ [DRAFTS_KEY]: drafts.value });
 };
 
 const deleteDraft = async (id: string) => {
