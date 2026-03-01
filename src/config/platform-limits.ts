@@ -197,7 +197,7 @@ export const PLATFORM_LIMITS_CONFIG: Record<string, PlatformLimits> = {
   zhihu: {
     code: 'zhihu',
     label: '知乎',
-    article: {
+    moment: {
       title: {
         max: 50,
         required: true,

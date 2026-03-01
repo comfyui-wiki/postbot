@@ -64,25 +64,34 @@
           </div>
 
           <!-- Title Input (for platforms that need it) -->
-          <input
-            v-if="activePlatformNeedsTitle"
-            type="text"
-            class="title-input"
-            :value="title"
-            @input="onTitleInput"
-            placeholder="添加标题"
-            :disabled="synced"
-          />
+          <div v-if="activePlatformNeedsTitle" class="input-wrapper">
+            <input
+              type="text"
+              class="title-input"
+              :value="title"
+              @input="onTitleInput"
+              placeholder="添加标题"
+              :disabled="synced"
+            />
+            <div class="char-counter title-counter" :class="{ 'over-limit': titleExceedsLimit }">
+              {{ title.length }} {{ titleLimitText }}
+            </div>
+          </div>
 
-          <textarea
-            ref="textareaRef"
-            class="main-editor"
-            :class="{ disabled: synced }"
-            :value="content"
-            @input="onInput"
-            :placeholder="editorPlaceholder"
-            :disabled="synced"
-          />
+          <div class="input-wrapper">
+            <textarea
+              ref="textareaRef"
+              class="main-editor"
+              :class="{ disabled: synced }"
+              :value="content"
+              @input="onInput"
+              :placeholder="editorPlaceholder"
+              :disabled="synced"
+            />
+            <div class="char-counter content-counter" :class="{ 'over-limit': contentExceedsLimit }">
+              {{ content.length }} {{ contentLimitText }}
+            </div>
+          </div>
 
           <!-- Draft Image Metadata Alert -->
           <div v-if="draftImageMetadata && draftImageMetadata.length > 0" class="draft-image-alert">
@@ -185,6 +194,60 @@ const editorPlaceholder = computed(() => {
   if (props.synced) return '写点什么...';
   const p = props.enabledPlatforms.find((p: any) => p.value === props.activePlatform);
   return p ? ('正在为 ' + p.label + ' 编写独立文案...') : '写点什么...';
+});
+
+// 标题限制检查
+const titleLimitInfo = computed(() => {
+  if (!props.platformLimitWarnings) return { max: null, exceeded: false };
+
+  const warnings = props.platformLimitWarnings;
+  const titleWarning = warnings.find((w) => w.includes('标题'));
+
+  if (!titleWarning) return { max: null, exceeded: false };
+
+  const match = titleWarning.match(/最多\s*(\d+)/);
+  const max = match ? parseInt(match[1]) : null;
+
+  return {
+    max,
+    exceeded: max ? props.title.length > max : false,
+  };
+});
+
+const titleExceedsLimit = computed(() => titleLimitInfo.value.exceeded);
+const titleLimitText = computed(() => {
+  if (!titleLimitInfo.value.max) return '字';
+  if (titleExceedsLimit.value) {
+    return `/ ${titleLimitInfo.value.max} 字 ⚠️超出`;
+  }
+  return `/ ${titleLimitInfo.value.max} 字`;
+});
+
+// 内容限制检查
+const contentLimitInfo = computed(() => {
+  if (!props.platformLimitWarnings) return { max: null, exceeded: false };
+
+  const warnings = props.platformLimitWarnings;
+  const contentWarning = warnings.find((w) => w.includes('正文'));
+
+  if (!contentWarning) return { max: null, exceeded: false };
+
+  const match = contentWarning.match(/最多\s*(\d+)/);
+  const max = match ? parseInt(match[1]) : null;
+
+  return {
+    max,
+    exceeded: max ? props.content.length > max : false,
+  };
+});
+
+const contentExceedsLimit = computed(() => contentLimitInfo.value.exceeded);
+const contentLimitText = computed(() => {
+  if (!contentLimitInfo.value.max) return '字';
+  if (contentExceedsLimit.value) {
+    return `/ ${contentLimitInfo.value.max} 字 ⚠️超出`;
+  }
+  return `/ ${contentLimitInfo.value.max} 字`;
 });
 
 const autoResize = () => {
@@ -564,6 +627,33 @@ watch(() => props.activePlatform, () => {
   }
 }
 
+.input-wrapper {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.title-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: @text;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 12px;
+
+  &::placeholder {
+    color: #3f3f46;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: #a1a1a6;
+  }
+}
+
 .main-editor {
   width: 100%;
   min-height: 200px;
@@ -581,6 +671,23 @@ watch(() => props.activePlatform, () => {
     opacity: 0.5;
     cursor: not-allowed;
     color: #a1a1a6;
+  }
+}
+
+.char-counter {
+  font-size: 12px;
+  color: #71717a;
+  text-align: right;
+  margin-top: 4px;
+  transition: color 0.2s;
+
+  &.over-limit {
+    color: #ef4444;
+    font-weight: 600;
+  }
+
+  &.title-counter {
+    margin-bottom: 8px;
   }
 }
 
