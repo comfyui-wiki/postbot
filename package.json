@@ -2,7 +2,7 @@
   "name": "PostBot",
   "displayName": "PostBot 内容同步助手",
   "version": "2.0.6",
-  "description": "PostBot 内容同步助手",
+  "description": "多平台内容同步",
   "author": "GitCoffee Team @GitCoffee",
   "scripts": {
     "dev": "plasmo dev",
