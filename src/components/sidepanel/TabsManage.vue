@@ -12,7 +12,6 @@
       @new-draft="createNewDraft"
       @select="loadDraft"
       @delete="deleteDraft"
-      @open-settings="openSettings"
     />
 
     <!-- 编辑器区域 -->
@@ -44,23 +43,12 @@
         v-if="showPlatformModal"
         :options="availablePlatformsForModal"
         :selectedCodes="localPublish.platformCodes"
+        :loggedInCodes="loggedInPlatformCodes"
+        :detecting="metaInfoLoading"
         :getPlatformColor="platformColor"
         :getPlatformInitial="platformInitial"
         @close="closePlatforms"
         @toggle="togglePlatform"
-      />
-    </Teleport>
-
-    <Teleport to="body">
-      <SettingsModal
-        v-if="showSettingsModal"
-        :loading="metaInfoLoading"
-        :successMsg="metaInfoSuccess"
-        :errorMsg="metaInfoError"
-        :links="loggedInPlatformLinks"
-        :getPlatformColor="platformColor"
-        :getPlatformInitial="platformInitial"
-        @close="closeSettings"
         @detect="loadMetaInfoList"
       />
     </Teleport>
@@ -79,7 +67,6 @@ import { saveImageBlob, getImageBlobs, deleteAllImageBlobs, fileToDataUrl as dbF
 import DraftList from './drafts/DraftList.vue';
 import EditorArea from './editor/EditorArea.vue';
 import PlatformModal from './modals/PlatformModal.vue';
-import SettingsModal from './modals/SettingsModal.vue';
 
 const STORAGE_KEY = 'postbot_local_publish_state';
 const DRAFTS_KEY  = 'postbot_drafts';
@@ -107,7 +94,6 @@ const platformInitial = (code: string) => PLATFORM_META[code]?.initial ?? code.c
 
 // ── 页面与 UI 状态 ─────────────────────────────────────────────────────────
 const showPlatformModal = ref(false);
-const showSettingsModal = ref(false);
 const activePlatform    = ref<string | null>(null);
 const selectedDraftId   = ref<string | null>(null);
 
@@ -119,6 +105,7 @@ const platformContents = ref<Record<string, string>>({}); // 仅当平台取消�
 
 // ── 表单状态 ──────────────────────────────────────────────────────────────
 const platformOptions       = ref<{ label: string; value: string; link?: string }[]>([]);
+const loggedInPlatformCodes = ref<string[]>([]); // 已登录的平台代码列表
 const loggedInPlatformLinks = ref<{ label: string; value: string; link: string }[]>([]);
 const localImageInputRef    = ref<HTMLInputElement | null>(null);
 const localImageDataUrls    = ref<string[]>([]);
@@ -218,8 +205,6 @@ const currentContent = computed<string>({
 // ── 方法 ─────────────────────────────────────────────────────────────────
 const onSchedule  = () => { alert('定时发布功能正在开发中，敬请期待！'); };
 const onAddImage  = () => { if (localImageInputRef.value) localImageInputRef.value.click(); };
-const openSettings   = () => { showSettingsModal.value = true; };
-const closeSettings  = () => { showSettingsModal.value = false; };
 const openPlatforms  = () => { showPlatformModal.value = true; };
 const closePlatforms = () => { showPlatformModal.value = false; };
 
@@ -530,9 +515,11 @@ onMounted(() => {
     const detected = result?.postbot_detected_platforms;
     if (detected && Array.isArray(detected.options)) {
       platformOptions.value = detected.options;
+      loggedInPlatformCodes.value = Array.isArray(detected.loggedInCodes) ? detected.loggedInCodes : [];
       loggedInPlatformLinks.value = Array.isArray(detected.links) ? detected.links : [];
     } else {
       platformOptions.value = [];
+      loggedInPlatformCodes.value = [];
       loggedInPlatformLinks.value = [];
     }
 
@@ -697,21 +684,23 @@ const loadMetaInfoList = async () => {
       }
       
       console.log('[PostBot] 生成的平台选项:', options);
-      
+
       // 确保 options 始终是数组
       platformOptions.value = Array.isArray(options) ? options : [];
-      loggedInPlatformLinks.value = platformOptions.value.map((o) => ({ 
-        label: o.label, 
-        value: o.value, 
-        link: o.link || '#' 
+      loggedInPlatformCodes.value = loggedInCodes; // 保存已登录的平台代码
+      loggedInPlatformLinks.value = platformOptions.value.map((o) => ({
+        label: o.label,
+        value: o.value,
+        link: o.link || '#'
       }));
-      
-      chrome.storage.local.set({ 
-        'postbot_detected_platforms': { 
-          options: platformOptions.value, 
-          links: loggedInPlatformLinks.value, 
-          lastDetected: Date.now() 
-        } 
+
+      chrome.storage.local.set({
+        'postbot_detected_platforms': {
+          options: platformOptions.value,
+          links: loggedInPlatformLinks.value,
+          loggedInCodes: loggedInCodes,
+          lastDetected: Date.now()
+        }
       });
       
       if (Array.isArray(localPublish.value.platformCodes) && localPublish.value.platformCodes.length === 0) {

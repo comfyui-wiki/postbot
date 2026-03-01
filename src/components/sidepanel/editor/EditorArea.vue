@@ -28,7 +28,7 @@
         <div class="writing-area">
           <!-- Sync Mode Toggle (Hide for first platform) -->
           <div v-if="enabledPlatforms.length > 1 && !isFirstPlatform" class="sync-mode-banner">
-            <span class="sync-label">Sync with {{ enabledPlatforms[0]?.label || 'PostBot' }}</span>
+            <span class="sync-label">与主文案同步</span>
             <button class="sync-switch" :class="{ active: synced }" @click="$emit('toggle-sync')" :title="synced ? '切换为独立编辑' : '切换为同步模式'">
               <span class="switch-circle"></span>
             </button>
