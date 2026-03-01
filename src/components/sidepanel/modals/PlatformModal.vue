@@ -57,6 +57,7 @@ const props = defineProps<{
   options: { label: string; value: string; link?: string }[];
   selectedCodes: string[];
   loggedInCodes?: string[];
+  hasDetected?: boolean;
   detecting?: boolean;
   getPlatformColor: (code: string) => string;
   getPlatformInitial: (code: string) => string;
@@ -66,9 +67,7 @@ const emit = defineEmits(['close', 'toggle', 'detect']);
 
 const loggedInCodes = computed(() => props.loggedInCodes ?? []);
 const detecting = computed(() => props.detecting ?? false);
-
-// 如果 loggedInCodes 不为空，说明检测过
-const hasDetected = computed(() => loggedInCodes.value.length > 0 || (props.loggedInCodes !== undefined && props.loggedInCodes.length === 0));
+const hasDetected = computed(() => props.hasDetected ?? false);
 
 const openPlatformLink = (link?: string) => {
   if (link && link !== '#') {
