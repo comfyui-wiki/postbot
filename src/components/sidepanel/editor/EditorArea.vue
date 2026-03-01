@@ -1,7 +1,7 @@
 <template>
   <div class="main">
-    <!-- Platform Tabs Bar -->
-    <div class="platform-tabs-bar" v-if="enabledPlatforms.length">
+    <!-- Platform Tabs Bar or Initial Setup -->
+    <div v-if="enabledPlatforms.length" class="platform-tabs-bar">
       <div class="platforms-list">
         <button
           v-for="p in enabledPlatforms"
@@ -19,6 +19,15 @@
       <div class="top-bar-actions">
         <button class="publish-btn" @click="$emit('publish')" :disabled="!enabledPlatforms.length">立即发布</button>
       </div>
+    </div>
+
+    <!-- Initial Setup Bar (no platforms selected) -->
+    <div v-else class="initial-setup-bar">
+      <div class="setup-content">
+        <span class="setup-icon">🚀</span>
+        <span class="setup-text">选择发布平台开始使用</span>
+      </div>
+      <button class="setup-btn" @click="$emit('open-platforms')">···</button>
     </div>
 
     <!-- Editor Canvas -->
@@ -197,7 +206,8 @@ watch(() => props.activePlatform, () => {
   position: relative;
 }
 
-.platform-tabs-bar {
+.platform-tabs-bar,
+.initial-setup-bar {
   height: 56px;
   padding: 0 16px;
   display: flex;
@@ -206,6 +216,42 @@ watch(() => props.activePlatform, () => {
   gap: 16px;
   border-bottom: 1px solid @border-vis;
   background: rgba(255, 255, 255, 0.01);
+}
+
+.initial-setup-bar {
+  .setup-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: @muted;
+    font-size: 14px;
+
+    .setup-icon {
+      font-size: 18px;
+    }
+  }
+
+  .setup-btn {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: #3f3f46;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 18px;
+    font-weight: 600;
+    color: #e4e4e7;
+
+    &:hover {
+      background: @accent;
+      color: #fff;
+    }
+  }
 }
 
 .platforms-list {
