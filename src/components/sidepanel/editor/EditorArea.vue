@@ -63,6 +63,18 @@
             :disabled="synced"
           />
 
+          <!-- Draft Image Metadata Alert -->
+          <div v-if="draftImageMetadata && draftImageMetadata.length > 0" class="draft-image-alert">
+            <div class="alert-content">
+              <span class="alert-icon">📸</span>
+              <div class="alert-text">
+                <div class="alert-title">该草稿有 {{ draftImageMetadata.length }} 张图片</div>
+                <div class="alert-desc">图片已丢失，点击按钮重新加载</div>
+              </div>
+            </div>
+            <button class="reload-btn" @click="$emit('reload-images')">重新加载</button>
+          </div>
+
           <!-- Media Previews -->
           <div class="media-grid" v-if="imageUrls.length">
             <div class="media-item" v-for="(url, i) in imageUrls" :key="i">
@@ -96,6 +108,13 @@
 <script lang="ts" setup>
 import { ref, computed, watch, nextTick } from 'vue';
 
+type ImageMetadata = {
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+};
+
 const props = defineProps<{
   content: string;
   title: string;
@@ -106,6 +125,7 @@ const props = defineProps<{
   mediaType: string;
   isFirstPlatform: boolean;
   activePlatformNeedsTitle: boolean;
+  draftImageMetadata?: ImageMetadata[];
   getPlatformColor: (code: string) => string;
   getPlatformInitial: (code: string) => string;
 }>();
@@ -120,7 +140,8 @@ const emit = defineEmits([
   'schedule',
   'open-platforms',
   'add-image',
-  'remove-image'
+  'remove-image',
+  'reload-images'
 ]);
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
@@ -377,6 +398,64 @@ watch(() => props.activePlatform, () => {
     opacity: 0.5;
     cursor: not-allowed;
     color: #a1a1a6;
+  }
+}
+
+.draft-image-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  margin: 16px 0;
+  background: rgba(251, 146, 60, 0.1);
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  border-radius: 8px;
+
+  .alert-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex: 1;
+
+    .alert-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .alert-text {
+      flex: 1;
+
+      .alert-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: @text;
+      }
+
+      .alert-desc {
+        font-size: 12px;
+        color: @muted;
+        margin-top: 2px;
+      }
+    }
+  }
+
+  .reload-btn {
+    background: #fb923c;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.2s;
+
+    &:hover {
+      background: #f97316;
+    }
   }
 }
 

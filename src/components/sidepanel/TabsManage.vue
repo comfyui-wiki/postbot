@@ -26,6 +26,7 @@
       :imageUrls="localImageDataUrls"
       :isFirstPlatform="activePlatform === localPublish.platformCodes[0]"
       :activePlatformNeedsTitle="PLATFORM_META[activePlatform || '']?.needsTitle ?? false"
+      :draftImageMetadata="selectedDraftImageMetadata"
       :getPlatformColor="platformColor"
       :getPlatformInitial="platformInitial"
       @toggle-sync="toggleSync"
@@ -34,6 +35,7 @@
       @open-platforms="openPlatforms"
       @add-image="onAddImage"
       @remove-image="removeImage"
+      @reload-images="quickReloadImages"
     />
 
     <!-- 弹窗组件（Teleport 到 body 避免层叠上下文问题） -->
@@ -70,6 +72,8 @@
 <script lang="ts" setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import { POSTBOT_ACTION } from '~message/postbot.action';
+import { getImageMetadata, fileToDataUrl, isImageMatch } from '~utils/imageStorage';
+import { saveImageBlob, getImageBlobs, deleteAllImageBlobs, fileToDataUrl as dbFileToDataUrl } from '~utils/imageDatabase';
 
 // 导入子组件
 import DraftList from './drafts/DraftList.vue';
@@ -118,6 +122,7 @@ const platformOptions       = ref<{ label: string; value: string; link?: string 
 const loggedInPlatformLinks = ref<{ label: string; value: string; link: string }[]>([]);
 const localImageInputRef    = ref<HTMLInputElement | null>(null);
 const localImageDataUrls    = ref<string[]>([]);
+const selectedDraftImageMetadata = ref<ImageMetadata[]>([]); // 用于显示草稿中丢失的图片信息
 
 const localPublish = ref({
   mediaType:     'moment' as 'article' | 'moment' | 'video',
@@ -128,14 +133,23 @@ const localPublish = ref({
 });
 
 // ── 草稿历史 ────────────────────────────────────────────────────────────
-type Draft = { 
-  id: string; 
-  content: string; 
-  time: number; 
-  platforms: string[]; 
+type ImageMetadata = {
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+};
+
+type Draft = {
+  id: string;
+  content: string;
+  time: number;
+  platforms: string[];
   platformCodes: string[];
   platformData?: Record<string, string>;
   isSynced?: boolean;
+  title?: string;
+  imageMetadata?: ImageMetadata[];
 };
 const drafts = ref<Draft[]>([]);
 
@@ -261,6 +275,74 @@ const removeImage = (index: number) => {
   localImageDataUrls.value.splice(index, 1);
 };
 
+/**
+ * 快速重新加载草稿中丢失的图片
+ * 用户点击"重新加载图片"按钮后，打开文件选择器
+ * 系统会验证用户选择的图片是否与保存的元数据匹配
+ */
+const quickReloadImages = () => {
+  if (localImageInputRef.value) {
+    // 临时监听文件选择
+    const handleFilesSelected = async (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const files = target.files;
+      if (!files) return;
+
+      localImageInputRef.value?.removeEventListener('change', handleFilesSelected);
+
+      const expectedCount = selectedDraftImageMetadata.value.length;
+      const selectedCount = files.length;
+
+      // 检查数量是否匹配
+      if (selectedCount !== expectedCount) {
+        const msg = `文件数量不匹配。期望 ${expectedCount} 张，你选择了 ${selectedCount} 张。`;
+        alert(msg);
+        target.value = '';
+        return;
+      }
+
+      // 转换图片并验证
+      const newDataUrls: string[] = [];
+      let allMatched = true;
+
+      for (let i = 0; i < files.length; i++) {
+        try {
+          const file = files[i];
+          const expectedMetadata = selectedDraftImageMetadata.value[i];
+
+          // 验证文件是否与元数据匹配
+          if (expectedMetadata && !isImageMatch(file, expectedMetadata)) {
+            console.warn(`[PostBot] 图片 #${i + 1} 不匹配：期望 ${expectedMetadata.name}，得到 ${file.name}`);
+            allMatched = false;
+          }
+
+          const dataUrl = await fileToDataUrl(file);
+          newDataUrls.push(dataUrl);
+        } catch (err) {
+          console.error('[PostBot] 转换图片失败:', err);
+        }
+      }
+
+      // 如果文件不匹配，提示用户但仍然加载（用户可能有理由这样做）
+      if (!allMatched) {
+        console.warn('[PostBot] 部分图片与保存的元数据不匹配，但已加载');
+      }
+
+      // 替换图片
+      if (newDataUrls.length > 0) {
+        localImageDataUrls.value = newDataUrls;
+        selectedDraftImageMetadata.value = []; // 清除丢失的图片提示
+      }
+
+      // 重置 input
+      target.value = '';
+    };
+
+    localImageInputRef.value.addEventListener('change', handleFilesSelected);
+    localImageInputRef.value.click();
+  }
+};
+
 // ── 草稿助手 ────────────────────────────────────────────────────────────
 const createNewDraft = () => {
   localPublish.value.content = '';
@@ -273,18 +355,23 @@ const createNewDraft = () => {
   selectedDraftId.value = null;
 };
 
-const deleteDraft = (id: string) => {
+const deleteDraft = async (id: string) => {
   if (!confirm('确定要删除这篇草稿吗？')) return;
+  try {
+    await deleteAllImageBlobs(id);
+  } catch (err) {
+    console.warn('[PostBot] 删除草稿图片失败:', err);
+  }
   const updated = drafts.value.filter(d => d.id !== id);
   drafts.value = updated;
   chrome.storage.local.set({ [DRAFTS_KEY]: updated });
   if (selectedDraftId.value === id) createNewDraft();
 };
 
-const saveDraft = () => {
+const saveDraft = async () => {
   const content = localPublish.value.content.trim();
   if (!content) return;
-  
+
   const platformData: Record<string, string> = {};
   // 保存所有非同步平台的独立内容
   for (const code of localPublish.value.platformCodes) {
@@ -307,34 +394,70 @@ const saveDraft = () => {
     platforms: enabledPlatforms.value.map((p) => p.label),
     platformCodes: [...localPublish.value.platformCodes],
     platformData,
-    isSynced: !hasIndependent
+    isSynced: !hasIndependent,
+    title: localPublish.value.title || undefined,
+    imageMetadata: localImageDataUrls.value.length > 0 ? localImageDataUrls.value.map((_, i) => ({
+      name: `image_${i + 1}.jpg`,
+      size: 0,
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    })) : undefined
   };
 
   const existingIndex = drafts.value.findIndex(d => d.id === selectedDraftId.value);
   let updated: Draft[] = [...drafts.value];
-  
+
   if (existingIndex > -1) {
     updated[existingIndex] = draft;
   } else {
     updated = [draft, ...drafts.value.slice(0, 49)];
   }
-  
+
   drafts.value = updated;
   chrome.storage.local.set({ [DRAFTS_KEY]: updated });
 };
 
 watch(
-  [() => localPublish.value.content, () => localPublish.value.platformCodes, platformContents, platformSyncStatus],
+  [() => localPublish.value.content, () => localPublish.value.platformCodes, () => localPublish.value.title, platformContents, platformSyncStatus, localImageDataUrls],
   () => {
-    if (localPublish.value.content.trim()) saveDraft();
+    if (localPublish.value.content.trim()) saveDraft().catch(err => console.error('[PostBot] 自动保存草稿失败:', err));
   },
   { deep: true }
 );
 
-const loadDraft = (d: Draft) => {
+const loadDraft = async (d: Draft) => {
   selectedDraftId.value = d.id;
   localPublish.value.content = d.content;
   localPublish.value.platformCodes = [...d.platformCodes];
+  localPublish.value.title = d.title || '';
+
+  // Try to load images from IndexedDB
+  try {
+    const savedFiles = await getImageBlobs(d.id);
+    if (savedFiles && savedFiles.length > 0) {
+      // Successfully loaded images from IndexedDB
+      const dataUrls: string[] = [];
+      for (const file of savedFiles) {
+        try {
+          const dataUrl = await dbFileToDataUrl(file);
+          dataUrls.push(dataUrl);
+        } catch (err) {
+          console.warn('[PostBot] 转换图片数据URL失败:', err);
+        }
+      }
+      localImageDataUrls.value = dataUrls;
+      selectedDraftImageMetadata.value = []; // Clear missing image alert since images are loaded
+    } else {
+      // No images found in IndexedDB - show missing image alert
+      selectedDraftImageMetadata.value = d.imageMetadata ? [...d.imageMetadata] : [];
+      localImageDataUrls.value = [];
+    }
+  } catch (err) {
+    console.warn('[PostBot] 加载草稿图片失败，显示缺失图片提示:', err);
+    // Show missing images alert if load failed
+    selectedDraftImageMetadata.value = d.imageMetadata ? [...d.imageMetadata] : [];
+    localImageDataUrls.value = [];
+  }
 
   // Restore platform-level sync status and platform-specific content
   if (d.platformData && !d.isSynced) {
@@ -432,22 +555,44 @@ watch(() => localPublish.value.mediaType, (newType) => {
 });
 
 // ── 图片处理 ───────────────────────────────────────────────────────────
-const onLocalImagesSelected = (e: Event) => {
+const onLocalImagesSelected = async (e: Event) => {
   const input = e.target as HTMLInputElement;
   const files = input.files;
   if (!files?.length) return;
+
   const results: string[] = [];
   let completed = 0;
+  const draftId = selectedDraftId.value || Date.now().toString();
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     if (!file.type.startsWith('image/')) {
-      if (++completed === files.length) { localImageDataUrls.value = [...localImageDataUrls.value, ...results]; input.value = ''; }
+      if (++completed === files.length) {
+        localImageDataUrls.value = [...localImageDataUrls.value, ...results];
+        input.value = '';
+      }
       continue;
     }
+
+    // Save image blob to IndexedDB
+    const imageIndex = localImageDataUrls.value.length + results.length;
+    try {
+      await saveImageBlob(draftId, imageIndex, file);
+    } catch (err) {
+      console.warn('[PostBot] 保存图片到IndexedDB失败:', err);
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       if (reader.result) results.push(reader.result as string);
-      if (++completed === files.length) { localImageDataUrls.value = [...localImageDataUrls.value, ...results]; input.value = ''; }
+      if (++completed === files.length) {
+        localImageDataUrls.value = [...localImageDataUrls.value, ...results];
+        input.value = '';
+        // Update draft ID if it was just created
+        if (!selectedDraftId.value) {
+          selectedDraftId.value = draftId;
+        }
+      }
     };
     reader.readAsDataURL(file);
   }
@@ -614,7 +759,7 @@ const triggerPublishNow = () => {
       isAutoPublish: false
     }
   });
-  saveDraft();
+  saveDraft().catch(err => console.error('[PostBot] 发布时保存草稿失败:', err));
 };
 </script>
 
