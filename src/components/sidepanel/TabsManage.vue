@@ -77,6 +77,8 @@ const DRAFTS_KEY  = 'postbot_drafts';
 
 // ── 平台元数据 ───────────────────────────────────────────────────────
 const PLATFORM_META: Record<string, { color: string; initial: string; label: string; needsTitle?: boolean }> = {
+  juejin:          { color: '#1E80FF', initial: '掘', label: '稀土掘金', needsTitle: true },
+  csdn:            { color: '#FFA500', initial: 'C', label: 'CSDN', needsTitle: true },
   bilibili:        { color: '#00A1D6', initial: 'B', label: 'Bilibili', needsTitle: true },
   xiaohongshu:     { color: '#FF2442', initial: '红', label: '小红书', needsTitle: true },
   weibo:           { color: '#E6162D', initial: '微', label: '微博' },
@@ -91,10 +93,16 @@ const PLATFORM_META: Record<string, { color: string; initial: string; label: str
   jianshu:         { color: '#EA6F5A', initial: '简', label: '简书' },
   zsxq:            { color: '#FFC300', initial: '星', label: '知识星球' },
   qq_om:           { color: '#1B6EF3', initial: 'Q', label: '腾讯企鹅号' },
+  cnblogs:         { color: '#FF6D00', initial: '博', label: '博客园', needsTitle: true },
+  oschina:         { color: '#06A64D', initial: '开', label: 'OSCHINA' },
+  segmentfault:    { color: '#009A61', initial: '思', label: 'SegmentFault', needsTitle: true },
+  $51cto:          { color: '#D81E06', initial: '5', label: '51CTO', needsTitle: true },
 };
 
 // 平台登录/访问链接
 const PLATFORM_URLS: Record<string, string> = {
+  juejin:          'https://juejin.cn/',
+  csdn:            'https://www.csdn.net/',
   bilibili:        'https://www.bilibili.com/',
   xiaohongshu:     'https://www.xiaohongshu.com/',
   weibo:           'https://weibo.com/',
@@ -109,6 +117,10 @@ const PLATFORM_URLS: Record<string, string> = {
   jianshu:         'https://www.jianshu.com/',
   zsxq:            'https://www.zsxq.com/',
   qq_om:           'https://om.qq.com/',
+  cnblogs:         'https://www.cnblogs.com/',
+  oschina:         'https://www.oschina.net/',
+  segmentfault:    'https://segmentfault.com/',
+  $51cto:          'https://www.51cto.com/',
 };
 
 const platformColor   = (code: string) => PLATFORM_META[code]?.color   ?? '#6366f1';
@@ -348,7 +360,8 @@ const togglePlatform = (code: string) => {
     platformImages.value = newImages;
     platformSyncStatus.value = newStatus;
 
-    if (activePlatform.value === code) {
+    // Always update activePlatform if the removed platform was active, or if activePlatform is not in the remaining list
+    if (activePlatform.value === code || !arr.includes(activePlatform.value ?? '')) {
       activePlatform.value = arr[0] ?? null;
     }
   }
@@ -725,6 +738,18 @@ watch(() => localPublish.value.mediaType, (newType) => {
     if (forType && Array.isArray(forType.platformCodes)) localPublish.value.platformCodes = forType.platformCodes;
   });
 });
+
+// 监听平台列表变化，确保 activePlatform 始终有效
+watch(() => localPublish.value.platformCodes, (newCodes) => {
+  if (Array.isArray(newCodes) && newCodes.length > 0) {
+    if (!activePlatform.value || !newCodes.includes(activePlatform.value)) {
+      // 使用 nextTick 确保 DOM 更新
+      nextTick(() => {
+        activePlatform.value = newCodes[0];
+      });
+    }
+  }
+}, { deep: true });
 
 // ── 图片处理 ───────────────────────────────────────────────────────────
 const onLocalImagesSelected = async (e: Event) => {

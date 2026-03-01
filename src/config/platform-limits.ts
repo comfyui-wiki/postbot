@@ -63,6 +63,38 @@ export interface PlatformLimits {
  * - video: 视频内容（B站、抖音视频等）
  */
 export const PLATFORM_LIMITS_CONFIG: Record<string, PlatformLimits> = {
+  juejin: {
+    code: 'juejin',
+    label: '稀土掘金',
+    article: {
+      title: {
+        required: true,
+      },
+      content: {
+        required: true,
+      },
+      images: {
+        max: 20,
+      },
+    },
+  },
+
+  csdn: {
+    code: 'csdn',
+    label: 'CSDN',
+    article: {
+      title: {
+        required: true,
+      },
+      content: {
+        required: true,
+      },
+      images: {
+        max: 10,
+      },
+    },
+  },
+
   bilibili: {
     code: 'bilibili',
     label: 'Bilibili',
@@ -199,8 +231,7 @@ export const PLATFORM_LIMITS_CONFIG: Record<string, PlatformLimits> = {
     label: '知乎',
     moment: {
       title: {
-        max: 50,
-        required: true,
+        max: 50
       },
       content: {
         max: 2000,
@@ -327,6 +358,70 @@ export const PLATFORM_LIMITS_CONFIG: Record<string, PlatformLimits> = {
     article: {
       title: {
         max: 80,
+        required: true,
+      },
+      content: {
+        required: true,
+      },
+      images: {
+        max: 10,
+      },
+    },
+  },
+
+  cnblogs: {
+    code: 'cnblogs',
+    label: '博客园',
+    article: {
+      title: {
+        required: true,
+      },
+      content: {
+        required: true,
+      },
+      images: {
+        max: 20,
+      },
+    },
+  },
+
+  oschina: {
+    code: 'oschina',
+    label: 'OSCHINA',
+    article: {
+      title: {
+        required: true,
+      },
+      content: {
+        required: true,
+      },
+      images: {
+        max: 10,
+      },
+    },
+  },
+
+  segmentfault: {
+    code: 'segmentfault',
+    label: 'SegmentFault',
+    article: {
+      title: {
+        required: true,
+      },
+      content: {
+        required: true,
+      },
+      images: {
+        max: 10,
+      },
+    },
+  },
+
+  $51cto: {
+    code: '$51cto',
+    label: '51CTO',
+    article: {
+      title: {
         required: true,
       },
       content: {
