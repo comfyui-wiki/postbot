@@ -40,7 +40,7 @@
                 </div>
               </div>
             </div>
-            <div class="platform-row-right">
+            <div class="platform-row-right" @click="$emit('toggle', p.value)">
               <div class="toggle-switch" :class="{ on: selectedCodes.includes(p.value) }"></div>
             </div>
           </div>
